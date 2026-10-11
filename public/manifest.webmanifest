@@ -1,0 +1,16 @@
+{
+  "name": "이야기로 만나는 외국어",
+  "short_name": "원서리딩",
+  "description": "외국어 원서를 읽고, 모르는 단어를 탭해서 찾고, 단어장과 복습까지 이어지는 독서 앱",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f6f3ec",
+  "theme_color": "#f6f3ec",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
