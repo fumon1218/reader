@@ -130,6 +130,7 @@ export default function Settings() {
           <div className="label">모델</div>
           <input className="input" list="models" value={s.model} onChange={(e) => set({ model: e.target.value.trim() })} />
           <datalist id="models">
+            <option value="gemini-3-flash-preview" />
             <option value="gemini-2.5-flash" />
             <option value="gemini-2.5-flash-lite" />
             <option value="gemini-2.5-pro" />

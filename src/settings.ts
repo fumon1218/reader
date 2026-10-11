@@ -18,7 +18,7 @@ export interface Settings {
 
 export const DEFAULTS: Settings = {
   apiKey: '',
-  model: 'gemini-2.5-flash',
+  model: 'gemini-3-flash-preview',
   theme: 'auto',
   fontFamily: 'serif',
   fontSize: 20,
