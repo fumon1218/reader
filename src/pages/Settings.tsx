@@ -171,6 +171,12 @@ export default function Settings() {
                 {sync.status === 'syncing' ? '동기화하는 중…' : sync.lastSyncAt ? `마지막 동기화 ${new Date(sync.lastSyncAt).toLocaleString('ko-KR')}` : '아직 동기화 전이에요'}
               </span>
             </p>
+            {sync.result && (
+              <p className="muted small">
+                이 기기 단어 {sync.result.local}개 · 서버로 올림 {sync.result.pushed}개 · 서버에서 받음 {sync.result.pulled}개
+                {sync.result.removed ? ` · 삭제 반영 ${sync.result.removed}개` : ''}
+              </p>
+            )}
             {sync.error && <p className="ws-err">{sync.error}</p>}
             <div className="row-btns">
               <button className="btn" onClick={() => void syncNow()} disabled={sync.status === 'syncing'}>

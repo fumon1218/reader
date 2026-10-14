@@ -10,10 +10,12 @@ export interface SyncState {
   user: remote.SyncUser | null;
   lastSyncAt: number | null;
   error: string;
+  /** 마지막 동기화 결과 (확인용) */
+  result: { local: number; pushed: number; pulled: number; removed: number } | null;
 }
 
 const FLAG = 'wts_sync_on';
-let state: SyncState = { status: 'off', user: null, lastSyncAt: null, error: '' };
+let state: SyncState = { status: 'off', user: null, lastSyncAt: null, error: '', result: null };
 const subs = new Set<() => void>();
 function setState(p: Partial<SyncState>) {
   state = { ...state, ...p };
@@ -111,7 +113,11 @@ async function run(): Promise<void> {
     dropTombs([...plan.dropTombs, ...plan.push.filter((p) => p.deleted).map((p) => p.key)]);
     const done = Date.now();
     saveMarks(user.uid, { lastPulled: Math.max(marks.lastPulled, plan.maxRemote), lastPushed: start, lastSyncAt: done });
-    setState({ status: 'idle', lastSyncAt: done });
+    setState({
+      status: 'idle',
+      lastSyncAt: done,
+      result: { local: local.length, pushed: plan.push.length, pulled: plan.upsertLocal.length, removed: plan.deleteLocal.length },
+    });
   } catch (e) {
     console.error('동기화 실패', e);
     setState({ status: 'error', error: syncErrorMessage(e) });
