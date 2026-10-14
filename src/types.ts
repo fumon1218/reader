@@ -1,4 +1,4 @@
-export type LangCode = 'en' | 'ja' | 'es';
+export type LangCode = 'en' | 'ja' | 'es' | 'fr' | 'de' | 'zh' | 'it' | 'pt' | 'ru';
 
 export interface LangInfo {
   code: LangCode;
@@ -12,7 +12,19 @@ export const LANGS: LangInfo[] = [
   { code: 'en', label: '영어', english: 'English', tts: 'en-US', short: 'EN' },
   { code: 'ja', label: '일본어', english: 'Japanese', tts: 'ja-JP', short: 'JA' },
   { code: 'es', label: '스페인어', english: 'Spanish', tts: 'es-ES', short: 'ES' },
+  { code: 'fr', label: '프랑스어', english: 'French', tts: 'fr-FR', short: 'FR' },
+  { code: 'de', label: '독일어', english: 'German', tts: 'de-DE', short: 'DE' },
+  { code: 'zh', label: '중국어', english: 'Chinese (Simplified)', tts: 'zh-CN', short: 'ZH' },
+  { code: 'it', label: '이탈리아어', english: 'Italian', tts: 'it-IT', short: 'IT' },
+  { code: 'pt', label: '포르투갈어', english: 'Portuguese', tts: 'pt-BR', short: 'PT' },
+  { code: 'ru', label: '러시아어', english: 'Russian', tts: 'ru-RU', short: 'RU' },
 ];
+
+/** 병렬 모드에서 쓰는 칸: 'orig'(책의 원문), 'ko'(한국어), 또는 언어 코드 */
+export type ParId = 'orig' | 'ko' | LangCode;
+export const PAR_MAX = 4;
+export const parLabel = (id: string, bookLang: LangCode): string =>
+  id === 'orig' ? `원문(${langInfo(bookLang).label})` : id === 'ko' ? '한국어' : langInfo(id as LangCode).label;
 
 export const langInfo = (c: LangCode): LangInfo => LANGS.find((l) => l.code === c) ?? LANGS[0];
 
@@ -46,6 +58,9 @@ export interface Book {
   /** data URL (작게 줄인 표지) */
   cover?: string;
   sample?: boolean;
+  /** 병렬 모드: 켜짐 여부와 표시할 칸의 순서(최대 4개, 'orig' 포함) */
+  parOn?: boolean;
+  par?: string[];
   /** 기기 간 동기화용 고유 번호 */
   uid?: string;
   updatedAt?: number;

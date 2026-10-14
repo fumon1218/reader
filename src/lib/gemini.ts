@@ -134,6 +134,8 @@ export function lookupWord(lang: LangCode, selected: string, sentence: string, f
     const jaRules =
       lang === 'ja'
         ? `- "reading": the hiragana reading of the lemma.\n- "koreanReading": Korean Hangul transcription of how the selected text is pronounced (e.g. 学校 -> 각꼬-).`
+        : lang === 'zh'
+        ? `- "reading": pinyin with tone marks for the lemma (e.g. 学校 -> xuéxiào).\n- "koreanReading": Korean Hangul transcription of how the selected text is pronounced (e.g. 学校 -> 쉐샤오).`
         : `- "reading": empty string.\n- "koreanReading": approximate Korean Hangul pronunciation of the selected text (e.g. gracias -> 그라시아스).`;
     const prompt = `You are a concise dictionary for a Korean speaker reading a ${L} book.
 
@@ -184,6 +186,30 @@ Return JSON with "translation" (Korean only) and ${grammarRule}`;
     const r = await callGemini<Partial<TranslationResult>>(prompt, TRANSLATE_SCHEMA);
     if (!r.translation?.trim()) throw new AiError('bad', '번역 결과가 비어 있어요. 다시 시도해 주세요.');
     return { translation: r.translation.trim(), grammar: (r.grammar ?? []).map((g) => g.trim()).filter(Boolean) };
+  });
+}
+
+/** 병렬 모드: 한 문단을 여러 언어로 한 번에 번역합니다. (요청 1번, 결과는 캐시) */
+export function translateMulti(lang: LangCode, text: string, targets: string[], force = false): Promise<Record<string, string>> {
+  const ids = targets.filter((t, i, a) => t !== 'orig' && a.indexOf(t) === i);
+  const key = `tm|${lang}|${[...ids].sort().join(',')}|${hash(text)}`;
+  return cached(key, force, async () => {
+    const name = (id: string) => (id === 'ko' ? 'Korean' : langInfo(id as LangCode).english);
+    const props: Record<string, unknown> = {};
+    ids.forEach((id) => (props[`t_${id}`] = str));
+    const prompt = `Translate this ${langInfo(lang).english} text into each of these languages: ${ids.map(name).join(', ')}. Keep the meaning and tone faithful and the wording natural.
+
+Text: """${text}"""
+
+Return JSON with these string fields: ${ids.map((id) => `"t_${id}" (${name(id)})`).join(', ')}.`;
+    const r = await callGemini<Record<string, string>>(prompt, { type: 'OBJECT', properties: props, required: Object.keys(props) });
+    const out: Record<string, string> = {};
+    ids.forEach((id) => {
+      const v = (r[`t_${id}`] ?? '').trim();
+      if (v) out[id] = v;
+    });
+    if (!Object.keys(out).length) throw new AiError('bad', '번역 결과가 비어 있어요. 다시 시도해 주세요.');
+    return out;
   });
 }
 

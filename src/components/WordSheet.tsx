@@ -168,7 +168,7 @@ export default function WordSheet(p: Props) {
 
         {res && (
           <div className="chips">
-            {lang === 'ja' && res.reading && <span className="chip">{res.reading}</span>}
+            {(lang === 'ja' || lang === 'zh') && res.reading && <span className="chip">{res.reading}</span>}
             {p.showKorean && res.koreanReading && <span className="chip">{res.koreanReading}</span>}
             {res.pos && <span className="chip muted">{res.pos}</span>}
             {existing && <span className={`chip ${existing.status === 'known' ? 'good' : 'accent'}`}>{existing.status === 'known' ? '아는 단어' : '학습 중'}</span>}

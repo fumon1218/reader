@@ -5,17 +5,18 @@ import DisplayControls from '../components/DisplayControls';
 import BookTools from '../components/BookTools';
 import { Sheet, useUI } from '../components/ui';
 import { books, getSection, getSectionTitles, highlights, useLive, words as wordsTable } from '../db';
-import { errorMessage, translateText } from '../lib/gemini';
+import { errorMessage, translateMulti, translateText } from '../lib/gemini';
 import { addReading } from '../lib/stats';
 import { containsKanji, normalizeForm, tokenize, type Span } from '../lib/tokenize';
 import { stopSpeaking } from '../lib/tts';
 import { back, navigate } from '../router';
 import { useSettings } from '../settings';
 import type { Book, LangCode, Section, Word } from '../types';
+import ParallelControls from '../components/ParallelControls';
 
 const cx = (...a: (string | false | null | undefined)[]) => a.filter(Boolean).join(' ');
 
-type Tr = { status: 'loading' | 'done'; text?: string };
+type Tr = { status: 'loading' | 'done'; text?: string; multi?: Record<string, string> };
 
 interface ParaProps {
   text: string;
@@ -28,10 +29,13 @@ interface ParaProps {
   hlKey: string;
   tr: Tr | undefined;
   onTranslate: (i: number) => void;
+  /** 병렬 모드일 때 칸의 순서(없으면 기본 번역 방식) */
+  order?: string[];
+  orderKey: string;
 }
 
 const Para = memo(
-  function Para({ text, index, lang, forms, ruby, sel, hl, tr, onTranslate }: ParaProps) {
+  function Para({ text, index, lang, forms, ruby, sel, hl, tr, onTranslate, order }: ParaProps) {
     const tokens = tokenize(text, lang);
     const nodes: ReactNode[] = [];
     tokens.forEach((t, ti) => {
@@ -63,12 +67,34 @@ const Para = memo(
         </span>
       );
     });
+    const orig = <p key="orig">{nodes}</p>;
+    const btn = (
+      <button key="btn" className="para-tr-btn" onClick={() => onTranslate(index)} aria-label="문단 번역" title="문단 번역">
+        <Icon name="translate" size={16} />
+      </button>
+    );
+    if (order && tr?.status === 'done' && tr.multi) {
+      // 병렬 모드: 사용자가 정한 순서대로 원문과 번역을 쌓아 보여 줍니다.
+      return (
+        <div className="para" data-para={index}>
+          {order.map((id) =>
+            id === 'orig' ? (
+              orig
+            ) : tr.multi![id] ? (
+              <div key={id} className="para-tr multi" lang={id}>
+                <span className="ltag">{id === 'ko' ? 'KO' : id.toUpperCase()}</span>
+                {tr.multi![id]}
+              </div>
+            ) : null
+          )}
+          {btn}
+        </div>
+      );
+    }
     return (
       <div className="para" data-para={index}>
-        <p>{nodes}</p>
-        <button className="para-tr-btn" onClick={() => onTranslate(index)} aria-label="문단 번역" title="문단 번역">
-          <Icon name="translate" size={16} />
-        </button>
+        {orig}
+        {btn}
         {tr && <div className={cx('para-tr', tr.status === 'loading' && 'loading')}>{tr.status === 'loading' ? '번역 중…' : tr.text}</div>}
       </div>
     );
@@ -82,6 +108,7 @@ const Para = memo(
     a.hlKey === b.hlKey &&
     a.tr === b.tr &&
     a.onTranslate === b.onTranslate &&
+    a.orderKey === b.orderKey &&
     a.sel?.a === b.sel?.a &&
     a.sel?.b === b.sel?.b
 );
@@ -316,6 +343,16 @@ export default function Reader({ bookId, startSection, startPara }: { bookId: nu
     setSel({ p, a: t, b: t });
   };
 
+  // 병렬 모드: 책마다 기억되는 칸 순서 (원문 외에 번역이 하나라도 있어야 켜집니다)
+  const parOrder = useMemo(() => {
+    const o = book?.parOn ? (book.par ?? []).filter((x) => x === 'orig' || x !== book.language) : [];
+    return o.length > 1 && o.some((x) => x !== 'orig') ? (o.includes('orig') ? o : ['orig', ...o]) : undefined;
+  }, [book?.parOn, book?.par, book?.language]);
+  const parKey = parOrder?.join(',') ?? '';
+  useEffect(() => {
+    setTrs({}); // 칸 구성이 바뀌면 열려 있던 번역을 닫습니다
+  }, [parKey]);
+
   const translatePara = useCallback(
     async (i: number) => {
       if (!section) return;
@@ -329,6 +366,11 @@ export default function Reader({ bookId, startSection, startPara }: { bookId: nu
       }
       setTrs((m) => ({ ...m, [i]: { status: 'loading' } }));
       try {
+        if (parOrder) {
+          const multi = await translateMulti(lang, section.paragraphs[i], parOrder);
+          setTrs((m) => ({ ...m, [i]: { status: 'done', multi } }));
+          return;
+        }
         const r = await translateText(lang, section.paragraphs[i], 'paragraph');
         setTrs((m) => ({ ...m, [i]: { status: 'done', text: r.translation } }));
       } catch (e) {
@@ -340,7 +382,7 @@ export default function Reader({ bookId, startSection, startPara }: { bookId: nu
         });
       }
     },
-    [section, trs, lang, ui]
+    [section, trs, lang, ui, parKey]
   );
 
   const goSection = (i: number, atEnd = false) => {
@@ -566,6 +608,8 @@ export default function Reader({ bookId, startSection, startPara }: { bookId: nu
             hlKey={hlByPara.get(i)?.key ?? ''}
             tr={trs[i]}
             onTranslate={translatePara}
+            order={parOrder}
+            orderKey={parKey}
           />
         ))}
 
@@ -653,6 +697,16 @@ export default function Reader({ bookId, startSection, startPara }: { bookId: nu
       <BookTools open={tools !== null} onClose={() => setTools(null)} bookId={bookId} lang={lang} tab={toolsTab} onTab={setToolsTab} onGo={goTo} />
       <Sheet open={showDisplay} onClose={() => setShowDisplay(false)} title="화면 설정">
         <DisplayControls />
+        <ParallelControls
+          book={book}
+          onChange={async (patch) => {
+            const cur = await books.get(bookId);
+            if (!cur) return;
+            const next = { ...cur, ...patch };
+            await books.put(next);
+            setBook(next);
+          }}
+        />
       </Sheet>
       <Sheet open={showToc} onClose={() => setShowToc(false)} title="목차">
         <ul className="toc">

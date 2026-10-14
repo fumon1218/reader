@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import Icon from './Icon';
-import { langInfo, type Book, type LangCode } from '../types';
+import { langInfo, LANGS, type Book, type LangCode } from '../types';
 import { containsKanji } from '../lib/tokenize';
 import { hash } from '../lib/util';
 
@@ -181,9 +181,7 @@ export function Empty({ icon, title, children }: { icon: Parameters<typeof Icon>
 export function LangPills({ value, onChange, withAll = false }: { value: LangCode | 'all'; onChange: (v: LangCode | 'all') => void; withAll?: boolean }) {
   const opts: { value: LangCode | 'all'; label: string }[] = [
     ...(withAll ? [{ value: 'all' as const, label: '전체' }] : []),
-    { value: 'en', label: '영어' },
-    { value: 'ja', label: '일본어' },
-    { value: 'es', label: '스페인어' },
+    ...LANGS.map((l) => ({ value: l.code as LangCode | 'all', label: l.label })),
   ];
   return (
     <div className="pills">

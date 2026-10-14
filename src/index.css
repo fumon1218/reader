@@ -1731,3 +1731,54 @@ body.immersive .tabbar {
   border-radius: 3px;
   padding: 0 1px;
 }
+
+.par-box {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line, rgba(128, 128, 128, 0.25));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.par-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.par-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface2);
+  border-radius: 12px;
+  padding: 4px 6px 4px 12px;
+}
+.par-list b {
+  flex: 1;
+  font-weight: 600;
+}
+.par-n {
+  color: var(--ink2);
+  font-variant-numeric: tabular-nums;
+}
+.par-btns {
+  display: flex;
+}
+.para-tr.multi {
+  font-family: inherit;
+  font-size: 0.86em;
+}
+.ltag {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--ink2);
+  font-size: 0.7em;
+  font-weight: 700;
+  vertical-align: 0.1em;
+}

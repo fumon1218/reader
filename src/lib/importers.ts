@@ -18,7 +18,7 @@ export interface ParsedBook {
 }
 
 // 한 화면 덩어리(섹션)의 최대 글자 수. 폰에서도 가볍게 넘어가도록 작게 유지합니다.
-const MAX_SECTION_CHARS: Record<LangCode, number> = { en: 6000, es: 6000, ja: 3000 };
+const MAX_SECTION_CHARS: Record<LangCode, number> = { en: 6000, es: 6000, fr: 6000, de: 6000, it: 6000, pt: 6000, ru: 6000, ja: 3000, zh: 3000 };
 
 // ---------------------------------------------------------------------------
 // 공통: 챕터 → 섹션
@@ -91,6 +91,23 @@ export function guessLanguage(text: string): LangCode {
   const sample = text.slice(0, 4000);
   const kana = (sample.match(/[぀-ヿ]/g) ?? []).length;
   if (kana > 15) return 'ja';
+  const cjk = (sample.match(/[㐀-鿿]/g) ?? []).length;
+  if (cjk > 40 && cjk > sample.length * 0.2) return 'zh';
+  const cyr = (sample.match(/[Ѐ-ӿ]/g) ?? []).length;
+  if (cyr > 40) return 'ru';
+  const cnt = (re: RegExp) => (sample.toLowerCase().match(re) ?? []).length;
+  const fr = cnt(/\b(le|les|des|est|une|que|qui|dans|pour|pas|vous|nous|avec|était)\b/g);
+  const de = cnt(/\b(der|die|das|und|nicht|ist|ein|eine|ich|mit|sich|auf|für|den)\b/g);
+  const it = cnt(/\b(il|gli|che|di|non|una|per|sono|con|della|nel|era|anche)\b/g);
+  const pt = cnt(/\b(os|as|um|uma|não|com|para|por|foi|ele|ela|você|mais|são)\b/g);
+  const enW = cnt(/\b(the|and|of|to|in|was|that|his|her|with|for|it|is)\b/g);
+  const best = Math.max(fr, de, it, pt);
+  if (best > 12 && best > enW * 1.2) {
+    if (best === de) return 'de';
+    if (best === fr) return 'fr';
+    if (best === pt) return 'pt';
+    return 'it';
+  }
   const es = (sample.match(/[¿¡ñáéíóúü]/gi) ?? []).length;
   const words = (sample.toLowerCase().match(/\b(el|la|los|las|de|que|y|en|un|una|es|por|con|para|su|se)\b/g) ?? []).length;
   const en = (sample.toLowerCase().match(/\b(the|and|of|to|in|was|that|his|her|with|for|it|is)\b/g) ?? []).length;
@@ -103,7 +120,7 @@ export function decodeText(buf: ArrayBuffer, lang?: LangCode): string {
   try {
     return new TextDecoder('utf-8', { fatal: true }).decode(buf);
   } catch {
-    const fallback = lang === 'ja' ? 'shift_jis' : 'windows-1252';
+    const fallback = lang === 'ja' ? 'shift_jis' : lang === 'zh' ? 'gb18030' : lang === 'ru' ? 'windows-1251' : 'windows-1252';
     try {
       return new TextDecoder(fallback).decode(buf);
     } catch {
@@ -153,7 +170,7 @@ export function parseTxt(raw: string, lang: LangCode): ParsedBook {
   }
 
   const blocks = text.split(/\n[ \t]*\n/);
-  const join = lang === 'ja' ? '' : ' ';
+  const join = lang === 'ja' || lang === 'zh' ? '' : ' ';
   let paragraphs: string[];
   if (blocks.length >= 5) {
     paragraphs = blocks.map((b) => b.split('\n').map((l) => l.trim()).filter(Boolean).join(join));
@@ -180,7 +197,7 @@ export function parseTxt(raw: string, lang: LangCode): ParsedBook {
 export function parseTxtBuffer(buf: ArrayBuffer, lang: LangCode | 'auto', fileName = ''): ParsedBook & { language: LangCode } {
   const first = decodeText(buf, lang === 'auto' ? undefined : lang);
   const language = lang === 'auto' ? guessLanguage(first) : lang;
-  const text = lang === 'auto' && language === 'ja' && /�/.test(first) ? decodeText(buf, 'ja') : first;
+  const text = lang === 'auto' && (language === 'ja' || language === 'zh' || language === 'ru') && /�/.test(first) ? decodeText(buf, language) : first;
   const parsed = parseTxt(text, language);
   if (!parsed.title) parsed.title = fileName.replace(/\.[^.]+$/, '');
   return { ...parsed, language };
@@ -275,6 +292,12 @@ function mapLang(code: string | undefined): LangCode | undefined {
   if (c.startsWith('ja')) return 'ja';
   if (c.startsWith('es')) return 'es';
   if (c.startsWith('en')) return 'en';
+  if (c.startsWith('fr')) return 'fr';
+  if (c.startsWith('de')) return 'de';
+  if (c.startsWith('zh')) return 'zh';
+  if (c.startsWith('it')) return 'it';
+  if (c.startsWith('pt')) return 'pt';
+  if (c.startsWith('ru')) return 'ru';
   return undefined;
 }
 
