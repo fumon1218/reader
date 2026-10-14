@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import Icon from '../components/Icon';
 import WordSheet from '../components/WordSheet';
 import DisplayControls from '../components/DisplayControls';
+import BookTools from '../components/BookTools';
 import { Sheet, useUI } from '../components/ui';
 import { books, getSection, getSectionTitles, highlights, useLive, words as wordsTable } from '../db';
 import { errorMessage, translateText } from '../lib/gemini';
@@ -104,6 +105,8 @@ export default function Reader({ bookId, startSection, startPara }: { bookId: nu
   const savePosOnLoad = useRef(false);
   const restoreEnd = useRef(false);
   const [slide, setSlide] = useState<number | null>(null);
+  const [tools, setTools] = useState<'search' | 'mark' | 'hl' | null>(null);
+  const [toolsTab, setToolsTab] = useState<'search' | 'mark' | 'hl'>('search');
 
   // 책 불러오기
   useEffect(() => {
@@ -151,7 +154,7 @@ export default function Reader({ bookId, startSection, startPara }: { bookId: nu
   const hlByPara = useMemo(() => {
     const m = new Map<number, { spans: Span[]; key: string }>();
     (hlRows ?? [])
-      .filter((h) => h.sectionIndex === sIdx)
+      .filter((h) => h.sectionIndex === sIdx && h.kind !== 'bookmark')
       .forEach((h) => {
         const cur = m.get(h.paraIndex) ?? { spans: [], key: '' };
         cur.spans.push({ start: h.start, end: h.end });
@@ -350,6 +353,44 @@ export default function Reader({ bookId, startSection, startPara }: { bookId: nu
     setSIdx(i);
   };
 
+  const goTo = (s: number, p: number) => {
+    if (s === sIdx) {
+      const el = contentRef.current?.querySelector<HTMLElement>(`[data-para="${p}"]`);
+      if (el) {
+        const top = el.getBoundingClientRect().top + window.scrollY - (topRef.current?.getBoundingClientRect().height ?? 56) - 12;
+        window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+      }
+      return;
+    }
+    goSection(s);
+    restorePara.current = p;
+  };
+
+  const firstVisibleMark = () => (hlRows ?? []).find((h) => h.kind === 'bookmark' && h.sectionIndex === sIdx && h.paraIndex === firstVisibleParagraph());
+  const toggleBookmark = async () => {
+    if (!section || sIdx === null) return;
+    const p = firstVisibleParagraph();
+    const ex = (hlRows ?? []).find((h) => h.kind === 'bookmark' && h.sectionIndex === sIdx && h.paraIndex === p);
+    if (ex?.id !== undefined) {
+      await highlights.del(ex.id);
+      ui.toast('책갈피를 뺐어요');
+      return;
+    }
+    await highlights.put({
+      bookId,
+      sectionIndex: sIdx,
+      paraIndex: p,
+      start: 0,
+      end: 0,
+      text: (section.paragraphs[p] ?? '').slice(0, 90),
+      note: '',
+      kind: 'bookmark',
+      createdAt: Date.now(),
+    });
+    ui.toast('책갈피를 꽂았어요');
+  };
+  const hasMark = !!firstVisibleMark();
+
   // ---- 한 화면씩 넘기기 (가장자리 탭 · 화살표 · 키보드) -----------------------
   const turn = useCallback(
     (dir: 1 | -1) => {
@@ -491,6 +532,12 @@ export default function Reader({ bookId, startSection, startPara }: { bookId: nu
             {section.title} · {sIdx + 1}/{book.sectionCount}
           </span>
         </button>
+        <button className="icon-btn" onClick={() => { setToolsTab('search'); setTools('search'); }} aria-label="책 안 검색">
+          <Icon name="search" />
+        </button>
+        <button className={cx('icon-btn', hasMark && 'on')} onClick={toggleBookmark} aria-label="책갈피" aria-pressed={hasMark}>
+          <Icon name="bookmark" />
+        </button>
         <button className="icon-btn" onClick={() => setShowToc(true)} aria-label="목차">
           <Icon name="list" />
         </button>
@@ -603,6 +650,7 @@ export default function Reader({ bookId, startSection, startPara }: { bookId: nu
         />
       )}
 
+      <BookTools open={tools !== null} onClose={() => setTools(null)} bookId={bookId} lang={lang} tab={toolsTab} onTab={setToolsTab} onGo={goTo} />
       <Sheet open={showDisplay} onClose={() => setShowDisplay(false)} title="화면 설정">
         <DisplayControls />
       </Sheet>

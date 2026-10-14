@@ -9,7 +9,7 @@ import { STATUS_LABEL, langInfo, type BookStatus } from '../types';
 export default function BookSheet({ bookId, onClose }: { bookId: number; onClose: () => void }) {
   const ui = useUI();
   const book = useLive(['books'], () => books.get(bookId), [bookId]);
-  const hls = useLive(['highlights'], () => highlights.where('bookId', bookId), [bookId]);
+  const hls = useLive(['highlights'], async () => (await highlights.where('bookId', bookId)).filter((h) => h.kind !== 'bookmark'), [bookId]);
   const dayRows = useLive(['days'], () => days.where('bookId', bookId), [bookId]);
   const wordRows = useLive(['words'], () => words.where('bookId', bookId), [bookId]);
   const [title, setTitle] = useState('');

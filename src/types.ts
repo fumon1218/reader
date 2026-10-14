@@ -108,6 +108,8 @@ export interface Highlight {
   text: string;
   note: string;
   createdAt: number;
+  /** 'bookmark'이면 책갈피(하이라이트 목록에는 나오지 않음) */
+  kind?: 'bookmark';
   uid?: string;
   updatedAt?: number;
 }

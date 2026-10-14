@@ -1718,3 +1718,16 @@ body.immersive .tabbar {
   min-width: 3.4em;
   text-align: right;
 }
+
+.icon-btn.on {
+  color: var(--accent);
+}
+.icon-btn.on svg {
+  fill: currentColor;
+}
+.hl-text mark {
+  background: var(--mark);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 1px;
+}
