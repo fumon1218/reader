@@ -7,6 +7,7 @@ import { exportBackup, importBackup } from '../lib/backup';
 import { errorMessage, testConnection } from '../lib/gemini';
 import { ttsSupported, speak } from '../lib/tts';
 import { useSettings } from '../settings';
+import { signInWithEmail, signInWithGoogle, signOutSync, syncErrorMessage, syncNow, useSync } from '../lib/sync/sync';
 
 function formatBytes(n: number) {
   if (n < 1024 * 1024) return `${Math.round(n / 1024)}KB`;
@@ -21,6 +22,21 @@ export default function Settings() {
   const [persisted, setPersisted] = useState<boolean | null>(null);
   const [usage, setUsage] = useState<string>('');
   const fileRef = useRef<HTMLInputElement>(null);
+  const sync = useSync();
+  const [email, setEmail] = useState('');
+  const [pw, setPw] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const doSignIn = async (fn: () => Promise<void>) => {
+    setBusy(true);
+    try {
+      await fn();
+    } catch (e) {
+      ui.toast(syncErrorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const refreshStorage = async () => {
     try {
@@ -139,6 +155,51 @@ export default function Settings() {
         <button className="btn block" onClick={test} disabled={testing || !s.apiKey.trim()}>
           <Icon name="refresh" size={18} /> {testing ? '확인하는 중…' : '연결 테스트'}
         </button>
+      </section>
+
+      <section className="card stack">
+        <h3>기기 간 동기화</h3>
+        <p className="muted small">
+          로그인하면 PC·아이폰·아이패드의 <b>단어장</b>이 같아져요. 책 본문과 API 키는 기기마다 따로 두는 값이라 동기화하지 않아요.
+        </p>
+        {sync.user ? (
+          <>
+            <p>
+              <b>{sync.user.email || '로그인됨'}</b>
+              <br />
+              <span className="muted small">
+                {sync.status === 'syncing' ? '동기화하는 중…' : sync.lastSyncAt ? `마지막 동기화 ${new Date(sync.lastSyncAt).toLocaleString('ko-KR')}` : '아직 동기화 전이에요'}
+              </span>
+            </p>
+            {sync.error && <p className="ws-err">{sync.error}</p>}
+            <div className="row-btns">
+              <button className="btn" onClick={() => void syncNow()} disabled={sync.status === 'syncing'}>
+                <Icon name="refresh" size={18} /> 지금 동기화
+              </button>
+              <button className="btn" onClick={() => doSignIn(signOutSync)}>
+                로그아웃
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <button className="btn block" onClick={() => doSignIn(signInWithGoogle)} disabled={busy}>
+              Google로 로그인
+            </button>
+            <p className="muted small">Google 로그인이 안 되면(특히 홈 화면 앱) 아래 이메일로 로그인해 보세요.</p>
+            <input className="input" type="email" autoComplete="email" placeholder="이메일" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <input className="input" type="password" autoComplete="current-password" placeholder="비밀번호 (6자 이상)" value={pw} onChange={(e) => setPw(e.target.value)} />
+            <div className="row-btns">
+              <button className="btn" onClick={() => doSignIn(() => signInWithEmail(email, pw, false))} disabled={busy || !email || !pw}>
+                로그인
+              </button>
+              <button className="btn" onClick={() => doSignIn(() => signInWithEmail(email, pw, true))} disabled={busy || !email || !pw}>
+                처음이라면 가입
+              </button>
+            </div>
+            {sync.error && <p className="ws-err">{sync.error}</p>}
+          </>
+        )}
       </section>
 
       <section className="card stack">

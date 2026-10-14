@@ -5,6 +5,7 @@ import { books, words, useLive } from '../db';
 import { parseCsv, rowsToWords, toCsv } from '../lib/csv';
 import { errorMessage } from '../lib/gemini';
 import { speak } from '../lib/tts';
+import { recordTomb } from '../lib/sync/tombs';
 import { addImportedWords } from '../lib/vocab';
 import { makeCloze } from '../lib/cloze';
 import { relativeDue, saveBlob, dateKey } from '../lib/util';
@@ -98,7 +99,10 @@ function WordRow({ w, bookTitle, open, onToggle }: { w: Word; bookTitle?: string
               className="btn small danger-ghost"
               onClick={async () => {
                 if (await ui.confirm(`"${w.lemma}"을(를) 단어장에서 삭제할까요?`, { okLabel: '삭제', danger: true })) {
-                  if (w.id !== undefined) await words.del(w.id);
+                  if (w.id !== undefined) {
+                    await words.del(w.id);
+                    recordTomb(w.key);
+                  }
                 }
               }}
             >

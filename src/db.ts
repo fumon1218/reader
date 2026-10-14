@@ -67,6 +67,13 @@ const listeners = new Set<Listener>();
 function emit(tables: StoreName[]) {
   listeners.forEach((l) => l(tables));
 }
+/** 어느 테이블이든 바뀌면 알려 달라고 등록합니다(동기화용). 해제 함수를 돌려줍니다. */
+export function onTablesChange(l: Listener): () => void {
+  listeners.add(l);
+  return () => {
+    listeners.delete(l);
+  };
+}
 
 // ---- 테이블 ----------------------------------------------------------
 export interface Table<T> {
