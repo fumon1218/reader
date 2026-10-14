@@ -5,12 +5,23 @@ import { words, useLive } from '../db';
 import { makeCloze } from '../lib/cloze';
 import { intervalLabel, schedule, type Grade } from '../lib/srs';
 import { speak } from '../lib/tts';
-import { dateKey } from '../lib/util';
+import { dateKey, hash } from '../lib/util';
+import { normalizeForm } from '../lib/tokenize';
 import { navigate } from '../router';
 import { useSettings } from '../settings';
 import type { LangCode, Word } from '../types';
 
-type Mode = 'recall' | 'cloze';
+type Mode = 'recall' | 'cloze' | 'type' | 'choice' | 'listen' | 'mix';
+type Eff = Exclude<Mode, 'mix'>;
+const MODES: Mode[] = ['recall', 'cloze', 'type', 'choice', 'listen', 'mix'];
+const MODE_HELP: Record<Mode, string> = {
+  recall: '문장 속 단어를 보고 뜻을 떠올려요. 읽기 연습에 가장 가까워요.',
+  cloze: '뜻을 힌트로 보고 문장의 빈칸 단어를 떠올려요. 쓰기·말하기 연습에 좋아요.',
+  type: '뜻을 보고 단어를 직접 써 봐요. 철자까지 기억하고 싶을 때 좋아요.',
+  choice: '단어를 보고 4개 중에서 뜻을 골라요. 가볍게 훑어볼 때 좋아요.',
+  listen: '소리를 듣고 뜻을 떠올려요. 듣기 연습에 좋아요.',
+  mix: '카드마다 방식을 섞어서 내요. 지루하지 않아요.',
+};
 const MODE_KEY = 'wts_review_mode';
 
 const startOfToday = () => {
@@ -35,7 +46,8 @@ export default function Review() {
   const [lang, setLang] = useState<LangCode | 'all'>('all');
   const [mode, setMode] = useState<Mode>(() => {
     try {
-      return (localStorage.getItem(MODE_KEY) as Mode) || 'recall';
+      const m = localStorage.getItem(MODE_KEY) as Mode;
+      return MODES.includes(m) ? m : 'recall';
     } catch {
       return 'recall';
     }
@@ -45,6 +57,8 @@ export default function Review() {
   const [done, setDone] = useState({ again: 0, hard: 0, good: 0, easy: 0 });
   const [total, setTotal] = useState(0);
   const sessionLang = useRef<LangCode | 'all'>('all');
+  const [typed, setTyped] = useState('');
+  const [picked, setPicked] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -71,6 +85,8 @@ export default function Review() {
     setQueue(q);
     setTotal(q.length);
     setFlipped(false);
+    setTyped('');
+    setPicked(null);
     setDone({ again: 0, hard: 0, good: 0, easy: 0 });
   };
 
@@ -90,6 +106,32 @@ export default function Review() {
       return rest;
     });
     setFlipped(false);
+    setTyped('');
+    setPicked(null);
+  };
+
+  // 카드마다 실제로 쓸 방식 (섞기 모드이거나 재료가 모자라면 알맞게 바꿔요)
+  const distractors = (c: Word): string[] => {
+    const pool = (all ?? []).filter((w) => w.key !== c.key && w.meaning.trim() && w.meaning.trim() !== c.meaning.trim());
+    const same = pool.filter((w) => w.language === c.language);
+    const src = same.length >= 3 ? same : pool;
+    const seen = new Set<string>();
+    return src
+      .sort((a, b) => (hash(c.key + a.key) < hash(c.key + b.key) ? -1 : 1))
+      .map((w) => w.meaning.trim())
+      .filter((m) => (seen.has(m) ? false : (seen.add(m), true)))
+      .slice(0, 3);
+  };
+  const effMode = (c: Word): Eff => {
+    const hasCloze = !!makeCloze(c.context, [c.surface, c.lemma, ...c.forms]);
+    const hasChoice = !!c.meaning.trim() && distractors(c).length >= 3;
+    const ok = (m: Eff) => (m === 'cloze' ? hasCloze : m === 'choice' ? hasChoice : m === 'type' ? !!c.meaning.trim() : true);
+    let m: Eff;
+    if (mode === 'mix') {
+      const opts = (['recall', 'cloze', 'type', 'choice', 'listen'] as Eff[]).filter(ok);
+      m = opts[parseInt(hash(c.key + c.reps).slice(0, 4), 36) % opts.length];
+    } else m = mode;
+    return ok(m) ? m : 'recall';
   };
 
   // 키보드: 스페이스로 뒤집기, 1~4로 평가 (외장 키보드용)
@@ -109,10 +151,21 @@ export default function Review() {
     return () => window.removeEventListener('keydown', onKey);
   });
 
+  // 듣기 카드는 나타날 때 자동으로 한 번 읽어 줍니다.
+  const cardKey = card ? `${card.key}|${card.reps}|${card.lapses}` : '';
+  useEffect(() => {
+    if (card && !flipped && effMode(card) === 'listen') void speak(card.lemma, card.language, settings.ttsRate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cardKey, mode]);
+
   // ---------- 진행 중 ----------
   if (queue && card) {
-    const cloze = mode === 'cloze' ? makeCloze(card.context, [card.surface, card.lemma, ...card.forms]) : null;
-    const useCloze = mode === 'cloze' && cloze;
+    const eff = effMode(card);
+    const cloze = eff === 'cloze' || eff === 'type' ? makeCloze(card.context, [card.surface, card.lemma, ...card.forms]) : null;
+    const useCloze = eff === 'cloze' && cloze;
+    const options = eff === 'choice' ? [card.meaning.trim(), ...distractors(card)].sort((a, b) => (hash(card.key + a) < hash(card.key + b) ? -1 : 1)) : [];
+    const typedOk = normalizeForm(typed) !== '' && [card.lemma, card.surface, ...card.forms].some((f) => normalizeForm(f) === normalizeForm(typed));
+    const submitTyped = () => setFlipped(true);
     const doneCount = total - queue.length;
     const labels: [Grade, string][] = [
       ['again', '다시'],
@@ -143,6 +196,68 @@ export default function Review() {
               </p>
               <p className="rv-hint">{card.meaning}</p>
             </>
+          ) : eff === 'type' ? (
+            <>
+              {cloze && (
+                <p className="rv-sentence" lang={card.language}>
+                  {cloze.before}
+                  {flipped ? <mark>{cloze.answer}</mark> : <span className="blank">＿＿＿＿</span>}
+                  {cloze.after}
+                </p>
+              )}
+              <p className="rv-hint">{card.meaning}</p>
+              {!flipped && (
+                <input
+                  className="input rv-input"
+                  lang={card.language}
+                  autoFocus
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  placeholder="단어를 써 보세요"
+                  value={typed}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => setTyped(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && submitTyped()}
+                />
+              )}
+              {flipped && (
+                <p className={typedOk ? 'rv-ok' : 'rv-no'}>{typed.trim() ? (typedOk ? '맞았어요! ' : '아쉬워요. ') + `내가 쓴 답: ${typed}` : '쓰지 않고 정답을 봤어요'}</p>
+              )}
+            </>
+          ) : eff === 'choice' ? (
+            <>
+              <p className="rv-word" lang={card.language}>
+                <WordText lemma={card.lemma} reading={flipped ? card.reading : ''} lang={card.language} />
+              </p>
+              <div className="rv-options" onClick={(e) => e.stopPropagation()}>
+                {options.map((o) => (
+                  <button
+                    key={o}
+                    className={`rv-opt ${flipped ? (o === card.meaning.trim() ? 'right' : o === picked ? 'wrong' : '') : ''}`}
+                    disabled={flipped}
+                    onClick={() => {
+                      setPicked(o);
+                      setFlipped(true);
+                    }}
+                  >
+                    {o}
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : eff === 'listen' ? (
+            <button
+              className="rv-listen"
+              onClick={(e) => {
+                e.stopPropagation();
+                void speak(card.lemma, card.language, settings.ttsRate);
+              }}
+              aria-label="다시 듣기"
+            >
+              <Icon name="volume" size={44} />
+              <span className="muted">눌러서 다시 듣기</span>
+            </button>
           ) : card.context && makeCloze(card.context, [card.surface, card.lemma, ...card.forms]) ? (
             <p className="rv-sentence" lang={card.language}>
               {(() => {
@@ -182,7 +297,7 @@ export default function Review() {
               {card.note && <div className="muted small">{card.note}</div>}
             </div>
           ) : (
-            <div className="rv-tap muted">{useCloze ? '탭해서 정답 보기' : '탭해서 뜻 보기'}</div>
+            eff !== 'choice' && eff !== 'type' && <div className="rv-tap muted">{useCloze ? '탭해서 정답 보기' : '탭해서 뜻 보기'}</div>
           )}
         </div>
 
@@ -198,7 +313,7 @@ export default function Review() {
           </div>
         ) : (
           <button className="btn primary block big" onClick={() => setFlipped(true)}>
-            정답 보기
+            {eff === 'type' && typed.trim() ? '확인' : eff === 'choice' ? '모르겠어요' : '정답 보기'}
           </button>
         )}
       </div>
@@ -264,10 +379,14 @@ export default function Review() {
             options={[
               { value: 'recall', label: '뜻 떠올리기' },
               { value: 'cloze', label: '빈칸 채우기' },
+              { value: 'type', label: '직접 쓰기' },
+              { value: 'choice', label: '4지선다' },
+              { value: 'listen', label: '듣고 맞히기' },
+              { value: 'mix', label: '섞어서' },
             ]}
           />
           <p className="muted small" style={{ marginTop: 8 }}>
-            {mode === 'recall' ? '문장 속 단어를 보고 뜻을 떠올려요. 읽기 연습에 가장 가까워요.' : '뜻을 힌트로 보고 문장의 빈칸 단어를 떠올려요. 쓰기·말하기 연습에 좋아요.'}
+            {MODE_HELP[mode]}
           </p>
         </div>
         <button className="btn primary block big" disabled={nDue + nNew === 0} onClick={start}>
