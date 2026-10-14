@@ -16,6 +16,8 @@ export interface Settings {
   pageTurn: boolean;
   /** 읽는 동안 화면이 꺼지지 않게 하기 */
   keepAwake: boolean;
+  /** 본문에서 저장한(학습 중) 단어에 형광펜 표시 */
+  markWords: boolean;
   dailyGoalMin: number;
   newPerDay: number;
 }
@@ -32,6 +34,7 @@ export const DEFAULTS: Settings = {
   showKoreanReading: true,
   pageTurn: true,
   keepAwake: true,
+  markWords: true,
   dailyGoalMin: 20,
   newPerDay: 15,
 };

@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import Icon from '../components/Icon';
 import WordSheet from '../components/WordSheet';
 import DisplayControls from '../components/DisplayControls';
-import BookTools from '../components/BookTools';
+import BookTools, { type ToolTab } from '../components/BookTools';
 import { Sheet, useUI } from '../components/ui';
 import { books, getSection, getSectionTitles, highlights, useLive, words as wordsTable } from '../db';
 import { errorMessage, translateMulti, translateText } from '../lib/gemini';
@@ -132,8 +132,8 @@ export default function Reader({ bookId, startSection, startPara }: { bookId: nu
   const savePosOnLoad = useRef(false);
   const restoreEnd = useRef(false);
   const [slide, setSlide] = useState<number | null>(null);
-  const [tools, setTools] = useState<'search' | 'mark' | 'hl' | null>(null);
-  const [toolsTab, setToolsTab] = useState<'search' | 'mark' | 'hl'>('search');
+  const [tools, setTools] = useState<ToolTab | null>(null);
+  const [toolsTab, setToolsTab] = useState<ToolTab>('search');
 
   // 책 불러오기
   useEffect(() => {
@@ -590,7 +590,7 @@ export default function Reader({ bookId, startSection, startPara }: { bookId: nu
 
       <div
         ref={contentRef}
-        className={cx('rd-text', `reader-font-${settings.fontFamily}`, sel && 'has-sheet', settings.pageTurn && 'turn-on')}
+        className={cx('rd-text', `reader-font-${settings.fontFamily}`, sel && 'has-sheet', settings.pageTurn && 'turn-on', !settings.markWords && 'no-marks')}
         lang={lang}
         onClick={onTextClick}
       >
@@ -694,7 +694,15 @@ export default function Reader({ bookId, startSection, startPara }: { bookId: nu
         />
       )}
 
-      <BookTools open={tools !== null} onClose={() => setTools(null)} bookId={bookId} lang={lang} tab={toolsTab} onTab={setToolsTab} onGo={goTo} />
+      <BookTools open={tools !== null} onClose={() => setTools(null)} bookId={bookId} lang={lang} tab={toolsTab} onTab={setToolsTab}
+        onGo={goTo}
+        section={section}
+        forms={forms}
+        onPickWord={(p, t) => {
+          goTo(sIdx, p);
+          setSel({ p, a: t, b: t });
+        }}
+      />
       <Sheet open={showDisplay} onClose={() => setShowDisplay(false)} title="화면 설정">
         <DisplayControls />
         <ParallelControls

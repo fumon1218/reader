@@ -1,12 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Icon from './Icon';
 import { Sheet } from './ui';
 import { highlights, sections, useLive } from '../db';
-import type { LangCode } from '../types';
+import { normalizeForm, tokenize } from '../lib/tokenize';
+import type { LangCode, Section, Word } from '../types';
+
+export type ToolTab = 'search' | 'mark' | 'hl' | 'words';
 
 type Hit = { s: number; p: number; before: string; match: string; after: string; title: string };
 
 const MAX_HITS = 80;
+// 너무 흔해서 미리보기에서 빼는 긴 단어들
+const COMMON = new Set('through between everything something because before without another nothing thought against should around itself himself herself myself yourself there their these those which would could really almost always never anyone someone however though although while where within across behind before after under until again still being having people little'.split(' '));
 
 export default function BookTools({
   open,
@@ -16,18 +21,55 @@ export default function BookTools({
   tab,
   onTab,
   onGo,
+  section,
+  forms,
+  onPickWord,
 }: {
   open: boolean;
   onClose: () => void;
   bookId: number;
   lang: LangCode;
-  tab: 'search' | 'mark' | 'hl';
-  onTab: (t: 'search' | 'mark' | 'hl') => void;
+  tab: ToolTab;
+  onTab: (t: ToolTab) => void;
   onGo: (s: number, p: number) => void;
+  section: Section | null;
+  forms: Map<string, Word>;
+  onPickWord: (p: number, t: number) => void;
 }) {
   const rows = useLive(['highlights'], () => highlights.where('bookId', bookId), [bookId]);
   const marks = (rows ?? []).filter((h) => h.kind === 'bookmark').sort((a, b) => a.sectionIndex - b.sectionIndex || a.paraIndex - b.paraIndex);
   const hls = (rows ?? []).filter((h) => h.kind !== 'bookmark').sort((a, b) => a.sectionIndex - b.sectionIndex || a.paraIndex - b.paraIndex);
+
+  // 이 구간 미리보기: 내가 학습 중인 단어 + 여러 번 나오는 낯선 단어
+  const preview = useMemo(() => {
+    if (!open || tab !== 'words' || !section) return null;
+    const mine = new Map<string, { w: Word; n: number }>();
+    const fresh = new Map<string, { text: string; n: number; p: number; t: number }>();
+    const cjk = lang === 'ja' || lang === 'zh';
+    section.paragraphs.forEach((para, p) => {
+      tokenize(para, lang).forEach((tok, t) => {
+        if (!tok.word) return;
+        const key = normalizeForm(tok.text);
+        const w = forms.get(key);
+        if (w) {
+          if (w.status === 'learning') {
+            const cur = mine.get(w.key);
+            if (cur) cur.n++;
+            else mine.set(w.key, { w, n: 1 });
+          }
+          return;
+        }
+        if (COMMON.has(key) || tok.text.length < (cjk ? 2 : 6) || /^[\d\p{P}]+$/u.test(tok.text)) return;
+        const cur = fresh.get(key);
+        if (cur) cur.n++;
+        else fresh.set(key, { text: tok.text, n: 1, p, t });
+      });
+    });
+    return {
+      mine: [...mine.values()].sort((a, b) => b.n - a.n),
+      fresh: [...fresh.values()].filter((f) => f.n >= 2).sort((a, b) => b.n - a.n).slice(0, 24),
+    };
+  }, [open, tab, section, forms, lang]);
 
   const [q, setQ] = useState('');
   const [hits, setHits] = useState<Hit[] | null>(null);
@@ -83,11 +125,12 @@ export default function BookTools({
   };
 
   return (
-    <Sheet open={open} onClose={onClose} title="찾기 · 책갈피 · 하이라이트">
+    <Sheet open={open} onClose={onClose} title="찾기 · 책갈피 · 단어">
       <div className="seg" style={{ marginBottom: 12 }}>
         <button className={tab === 'search' ? 'on' : ''} onClick={() => onTab('search')}>검색</button>
         <button className={tab === 'mark' ? 'on' : ''} onClick={() => onTab('mark')}>책갈피 {marks.length}</button>
         <button className={tab === 'hl' ? 'on' : ''} onClick={() => onTab('hl')}>하이라이트 {hls.length}</button>
+        <button className={tab === 'words' ? 'on' : ''} onClick={() => onTab('words')}>단어 미리보기</button>
       </div>
 
       {tab === 'search' && (
@@ -120,6 +163,54 @@ export default function BookTools({
             </ul>
           )}
           {more && <p className="muted" style={{ marginTop: 8 }}>결과가 많아 앞쪽 {MAX_HITS}개만 보여요. 더 길게 입력해 보세요.</p>}
+        </div>
+      )}
+
+      {tab === 'words' && preview && (
+        <div className="stack">
+          <p className="muted small">지금 읽는 구간({section?.title})을 훑어본 결과예요.</p>
+          <div>
+            <div className="label">내가 학습 중인 단어 ({preview.mine.length})</div>
+            {preview.mine.length === 0 ? (
+              <p className="muted small">이 구간에는 학습 중인 단어가 없어요.</p>
+            ) : (
+              <ul className="hl-list">
+                {preview.mine.map(({ w, n }) => (
+                  <li key={w.key}>
+                    <div className="hl-text">
+                      <span lang={lang}><b>{w.lemma}</b>{w.reading && w.reading !== w.lemma ? ` (${w.reading})` : ''}</span>
+                      <em>{w.meaning} · {n}번 나와요</em>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div>
+            <div className="label">자주 나오는 낯선 단어 ({preview.fresh.length})</div>
+            {preview.fresh.length === 0 ? (
+              <p className="muted small">두 번 이상 나오는 낯선 단어가 없어요.</p>
+            ) : (
+              <>
+                <p className="muted small">누르면 본문의 그 자리로 가서 뜻을 찾을 수 있어요.</p>
+                <div className="pills" style={{ flexWrap: 'wrap' }}>
+                  {preview.fresh.map((f) => (
+                    <button
+                      key={f.text}
+                      className="pill"
+                      lang={lang}
+                      onClick={() => {
+                        onClose();
+                        onPickWord(f.p, f.t);
+                      }}
+                    >
+                      {f.text} ×{f.n}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
 

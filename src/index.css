@@ -1866,3 +1866,7 @@ body.immersive .tabbar {
 .center {
   text-align: center;
 }
+
+.no-marks .w-learning {
+  background: none;
+}
