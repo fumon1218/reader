@@ -27,7 +27,8 @@ async function callGemini<T>(prompt: string, schema: unknown, timeoutMs = 45000)
   // 2.5 flash는 생각(thinking)을 끄면 훨씬 빠릅니다.
   if (/gemini-2\.5-flash(?!-lite)/.test(model)) generationConfig.thinkingConfig = { thinkingBudget: 0 };
 
-  const candidates = [model, 'gemini-3-flash-preview', 'gemini-flash-latest', 'gemini-2.5-flash'].filter((m, i, a) => m && a.indexOf(m) === i);
+  // 모델마다 무료 한도가 따로라서, 한도가 찼거나(429) 모델이 없으면(404) 다음 모델로 자동 전환합니다.
+  const candidates = [model, 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-flash-latest', 'gemini-3-flash-preview'].filter((m, i, a) => m && a.indexOf(m) === i);
   let res: Response | null = null;
   let detail = '';
   for (const m of candidates) {
@@ -55,7 +56,7 @@ async function callGemini<T>(prompt: string, schema: unknown, timeoutMs = 45000)
     } catch {
       /* ignore */
     }
-    if (res.status !== 404) break;
+    if (res.status !== 404 && res.status !== 429) break;
   }
   if (!res) throw new AiError('network', '요청을 보내지 못했어요.');
 
