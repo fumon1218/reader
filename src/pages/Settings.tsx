@@ -9,6 +9,13 @@ import { ttsSupported, speak } from '../lib/tts';
 import { useSettings } from '../settings';
 import { signInWithEmail, signInWithGoogle, signOutSync, syncErrorMessage, syncNow, useSync } from '../lib/sync/sync';
 
+const MODELS = [
+  { id: 'gemini-2.5-flash-lite', label: 'gemini-2.5-flash-lite (한도 넉넉, 추천)' },
+  { id: 'gemini-2.5-flash', label: 'gemini-2.5-flash' },
+  { id: 'gemini-3-flash-preview', label: 'gemini-3-flash-preview (한도 적음)' },
+  { id: 'gemini-2.5-pro', label: 'gemini-2.5-pro (느리고 한도 적음)' },
+];
+
 function formatBytes(n: number) {
   if (n < 1024 * 1024) return `${Math.round(n / 1024)}KB`;
   return `${(n / 1024 / 1024).toFixed(1)}MB`;
@@ -144,13 +151,28 @@ export default function Settings() {
         </div>
         <div className="field">
           <div className="label">모델</div>
-          <input className="input" list="models" value={s.model} onChange={(e) => set({ model: e.target.value.trim() })} />
-          <datalist id="models">
-            <option value="gemini-3-flash-preview" />
-            <option value="gemini-2.5-flash" />
-            <option value="gemini-2.5-flash-lite" />
-            <option value="gemini-2.5-pro" />
-          </datalist>
+          <select
+            className="input"
+            value={MODELS.some((m) => m.id === s.model) ? s.model : '__custom'}
+            onChange={(e) => {
+              if (e.target.value === '__custom') set({ model: '' });
+              else set({ model: e.target.value });
+            }}
+          >
+            {MODELS.map((m) => (
+              <option key={m.id} value={m.id}>{m.label}</option>
+            ))}
+            <option value="__custom">직접 입력…</option>
+          </select>
+          {!MODELS.some((m) => m.id === s.model) && (
+            <input
+              className="input"
+              style={{ marginTop: 8 }}
+              placeholder="모델 이름 (예: gemini-2.5-flash)"
+              value={s.model}
+              onChange={(e) => set({ model: e.target.value.trim() })}
+            />
+          )}
         </div>
         <button className="btn block" onClick={test} disabled={testing || !s.apiKey.trim()}>
           <Icon name="refresh" size={18} /> {testing ? '확인하는 중…' : '연결 테스트'}
