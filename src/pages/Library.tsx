@@ -25,6 +25,10 @@ export default function Library() {
   const today = byDate.get(dateKey())?.seconds ?? 0;
   const streak = useMemo(() => computeStreak(byDate), [byDate]);
   const due = (wordRows ?? []).filter((w) => w.status === 'learning' && w.due <= Date.now()).length;
+  const startToday = new Date().setHours(0, 0, 0, 0);
+  const savedToday = (wordRows ?? []).filter((w) => w.createdAt >= startToday).length;
+  const reviewedToday = (wordRows ?? []).filter((w) => (w.lastReviewedAt ?? 0) >= startToday).length;
+  const learningCount = (wordRows ?? []).filter((w) => w.status === 'learning').length;
   const goal = settings.dailyGoalMin * 60;
   const pct = Math.min(100, Math.round((today / goal) * 100));
 
@@ -70,6 +74,9 @@ export default function Library() {
             <Icon name="flame" size={20} />
             <b>{streak}</b>일
           </div>
+        </div>
+        <div className="today-nums muted small">
+          오늘 저장 <b>{savedToday}</b> · 복습 <b>{reviewedToday}</b> · 학습 중 <b>{learningCount}</b>개
         </div>
         {due > 0 && (
           <button className="due-bar" onClick={() => navigate('review')}>

@@ -20,6 +20,9 @@ function WordRow({ w, bookTitle, open, onToggle }: { w: Word; bookTitle?: string
   const [s] = useSettings();
   const [meaning, setMeaning] = useState(w.meaning);
   const [reading, setReading] = useState(w.reading);
+  const [note, setNote] = useState(w.note);
+  const [context, setContext] = useState(w.context);
+  const [pos, setPos] = useState(w.pos);
   const cloze = open ? makeCloze(w.context, [w.surface, w.lemma, ...w.forms]) : null;
   const patch = (p: Partial<Word>) => words.put({ ...w, ...p, updatedAt: Date.now() });
 
@@ -60,10 +63,23 @@ function WordRow({ w, bookTitle, open, onToggle }: { w: Word; bookTitle?: string
               <input className="input" value={reading} onChange={(e) => setReading(e.target.value)} onBlur={() => reading !== w.reading && patch({ reading })} />
             </div>
           </div>
-          {(w.note || w.koreanReading || w.pos) && (
+          <div className="grid2">
+            <div>
+              <div className="label">품사</div>
+              <input className="input" value={pos} onChange={(e) => setPos(e.target.value)} onBlur={() => pos !== w.pos && patch({ pos })} />
+            </div>
+            <div>
+              <div className="label">메모</div>
+              <input className="input" value={note} onChange={(e) => setNote(e.target.value)} onBlur={() => note !== w.note && patch({ note })} />
+            </div>
+          </div>
+          <div>
+            <div className="label">예문</div>
+            <input className="input" lang={w.language} value={context} onChange={(e) => setContext(e.target.value)} onBlur={() => context !== w.context && patch({ context })} />
+          </div>
+          {(w.koreanReading || bookTitle) && (
             <p className="muted small">
-              {[w.pos, w.koreanReading, w.note].filter(Boolean).join(' · ')}
-              {bookTitle ? ` · ${bookTitle}` : ''}
+              {[w.koreanReading, bookTitle].filter(Boolean).join(' · ')}
             </p>
           )}
           <div className="row-btns">
@@ -154,9 +170,14 @@ export default function Vocab() {
             학습 중 {counts.learning} · 아는 단어 {counts.known}
           </p>
         </div>
-        <button className="icon-btn boxed" onClick={() => setMenu(true)} aria-label="더 보기">
-          <Icon name="more" />
-        </button>
+        <div className="row-btns">
+          <button className="icon-btn boxed" onClick={() => setAdding(true)} aria-label="단어 추가">
+            <Icon name="plus" />
+          </button>
+          <button className="icon-btn boxed" onClick={() => setMenu(true)} aria-label="더 보기">
+            <Icon name="more" />
+          </button>
+        </div>
       </header>
 
       <LangPills value={lang} onChange={setLang} withAll />

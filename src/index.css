@@ -1629,3 +1629,6 @@ section.card h3 {
 body.immersive .tabbar {
   display: none;
 }
+
+.today-nums { margin-top: 10px; }
+.today-nums b { color: var(--ink); font-weight: 700; }
