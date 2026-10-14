@@ -3,7 +3,8 @@ import { BookCover, Segmented, Sheet, Stars, useUI } from './ui';
 import Icon from './Icon';
 import { books, days, deleteBook, highlights, words, useLive } from '../db';
 import { navigate } from '../router';
-import { formatDate, formatMinutes } from '../lib/util';
+import { buildBookNotes } from '../lib/notes';
+import { formatDate, formatMinutes, saveBlob } from '../lib/util';
 import { STATUS_LABEL, langInfo, type BookStatus } from '../types';
 
 export default function BookSheet({ bookId, onClose }: { bookId: number; onClose: () => void }) {
@@ -125,6 +126,34 @@ export default function BookSheet({ bookId, onClose }: { bookId: number; onClose
           ) : (
             <p className="muted small">읽다가 단어를 탭한 뒤 ‘하이라이트’를 누르면 문장이 여기에 모여요.</p>
           )}
+        </div>
+
+        <div className="row-btns">
+          <button
+            className="btn small"
+            onClick={async () => {
+              const [allHl, ws] = [await highlights.where('bookId', bookId), await words.where('bookId', bookId)];
+              const md = buildBookNotes(book, allHl, ws);
+              try {
+                await navigator.clipboard.writeText(md);
+                ui.toast('독서 노트를 복사했어요');
+              } catch {
+                ui.toast('복사하지 못했어요. 파일로 저장해 보세요');
+              }
+            }}
+          >
+            <Icon name="file" size={16} /> 독서 노트 복사
+          </button>
+          <button
+            className="btn small"
+            onClick={async () => {
+              const [allHl, ws] = [await highlights.where('bookId', bookId), await words.where('bookId', bookId)];
+              const md = buildBookNotes(book, allHl, ws);
+              await saveBlob(`${book.title.replace(/[\\/:*?"<>|]/g, '').slice(0, 40)}-notes.md`, new Blob([md], { type: 'text/markdown' }), 'text/markdown');
+            }}
+          >
+            <Icon name="download" size={16} /> 독서 노트 파일(.md)
+          </button>
         </div>
 
         <button className="btn danger-ghost block" onClick={remove}>

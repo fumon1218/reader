@@ -7,6 +7,7 @@ import { errorMessage } from '../lib/gemini';
 import { speak } from '../lib/tts';
 import { recordTomb } from '../lib/sync/tombs';
 import { addImportedWords } from '../lib/vocab';
+import { findDuplicateGroups, isHard, mergeGroup } from '../lib/dedupe';
 import { makeCloze } from '../lib/cloze';
 import { relativeDue, saveBlob, dateKey } from '../lib/util';
 import { navigate } from '../router';
@@ -14,7 +15,7 @@ import { useSettings } from '../settings';
 import { LANGS, langInfo, type LangCode, type Word, type WordStatus } from '../types';
 
 type StatusFilter = WordStatus | 'all';
-type Sort = 'recent' | 'alpha' | 'due';
+type Sort = 'recent' | 'alpha' | 'due' | 'hard';
 
 function WordRow({ w, bookTitle, open, onToggle }: { w: Word; bookTitle?: string; open: boolean; onToggle: () => void }) {
   const ui = useUI();
@@ -36,6 +37,7 @@ function WordRow({ w, bookTitle, open, onToggle }: { w: Word; bookTitle?: string
         <div className="wrow-meaning">{w.meaning || <span className="muted">뜻 없음</span>}</div>
         <div className="wrow-side">
           <span className="tag">{langInfo(w.language).short}</span>
+          {isHard(w) && <span className="tag">자주 틀림</span>}
           {w.status === 'known' ? <span className="tag good">아는 단어</span> : <span className="muted small">{relativeDue(w.due)}</span>}
         </div>
       </button>
@@ -128,6 +130,7 @@ export default function Vocab() {
   const [openId, setOpenId] = useState<number | null>(null);
   const [menu, setMenu] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [dupOpen, setDupOpen] = useState(false);
 
   const titleOf = useMemo(() => new Map((bookRows ?? []).map((b) => [b.id!, b.title])), [bookRows]);
 
@@ -137,6 +140,7 @@ export default function Vocab() {
     if (needle) r = r.filter((w) => w.lemma.toLowerCase().includes(needle) || w.meaning.toLowerCase().includes(needle) || w.reading.includes(needle));
     if (sort === 'recent') r = [...r].sort((a, b) => b.createdAt - a.createdAt);
     else if (sort === 'alpha') r = [...r].sort((a, b) => a.lemma.localeCompare(b.lemma));
+    else if (sort === 'hard') r = [...r].sort((a, b) => b.lapses - a.lapses || a.ease - b.ease || b.createdAt - a.createdAt);
     else r = [...r].sort((a, b) => a.due - b.due);
     return r;
   }, [rows, lang, status, bookId, q, sort]);
@@ -146,6 +150,21 @@ export default function Vocab() {
     (rows ?? []).forEach((w) => c[w.status]++);
     return c;
   }, [rows]);
+
+  const dupGroups = useMemo(() => (dupOpen ? findDuplicateGroups(rows ?? []) : []), [dupOpen, rows]);
+  const mergeOne = async (g: Word[]) => {
+    const { keep, drop } = mergeGroup(g);
+    await words.put(keep);
+    for (const d of drop) {
+      if (d.id !== undefined) await words.del(d.id);
+      recordTomb('words', d.key);
+    }
+  };
+  const mergeAll = async () => {
+    if (!(await ui.confirm(`${dupGroups.length}묶음을 모두 합칠까요? 뜻은 이어 붙고, 복습 기록은 더 많이 복습한 쪽을 남겨요.`, { okLabel: '모두 합치기' }))) return;
+    for (const g of dupGroups) await mergeOne(g);
+    ui.toast('합쳤어요');
+  };
 
   const exportCsv = async () => {
     const out = [['word', 'reading', 'meaning', 'context', 'note', 'language', 'status']].concat(
@@ -205,6 +224,7 @@ export default function Vocab() {
           <option value="recent">최근 저장순</option>
           <option value="alpha">가나다·ABC순</option>
           <option value="due">복습 임박순</option>
+          <option value="hard">어려운 순(많이 틀린)</option>
         </select>
         {(bookRows?.length ?? 0) > 0 && (
           <select className="select" value={bookId} onChange={(e) => setBookId(e.target.value === 'all' ? 'all' : Number(e.target.value))} aria-label="책 필터">
@@ -246,7 +266,36 @@ export default function Vocab() {
           <button className="btn block" onClick={exportAnki} disabled={!list.length}>
             <Icon name="download" size={18} /> Anki용 텍스트로 내보내기
           </button>
+          <button className="btn block" onClick={() => { setMenu(false); setDupOpen(true); }}>
+            <Icon name="refresh" size={18} /> 비슷한 단어 정리(중복 합치기)
+          </button>
           <p className="muted small">내보내기는 지금 화면에 보이는 필터 결과를 기준으로 해요.</p>
+        </div>
+      </Sheet>
+      <Sheet open={dupOpen} onClose={() => setDupOpen(false)} title="비슷한 단어 정리">
+        <div className="stack">
+          {dupGroups.length === 0 ? (
+            <p className="muted">합칠 만한 비슷한 단어가 없어요.</p>
+          ) : (
+            <>
+              <p className="muted small">악센트·대소문자만 다르거나, 한 단어의 변화형이 다른 단어와 같은 경우예요. 합치면 뜻과 변화형이 한 카드로 모여요.</p>
+              {dupGroups.map((g) => (
+                <div key={g.map((w) => w.key).join('|')} className="card" style={{ padding: 12 }}>
+                  {g.map((w) => (
+                    <div key={w.key} lang={w.language}>
+                      <b>{w.lemma}</b> <span className="muted small">{w.meaning} · 복습 {w.reps}회</span>
+                    </div>
+                  ))}
+                  <button className="btn small" style={{ marginTop: 8 }} onClick={() => mergeOne(g)}>
+                    이 묶음 합치기
+                  </button>
+                </div>
+              ))}
+              <button className="btn primary block" onClick={mergeAll}>
+                모두 합치기 ({dupGroups.length}묶음)
+              </button>
+            </>
+          )}
         </div>
       </Sheet>
       <AddWords open={adding} onClose={() => setAdding(false)} defaultLang={lang === 'all' ? 'en' : lang} />
