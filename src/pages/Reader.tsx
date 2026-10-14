@@ -9,7 +9,7 @@ import { errorMessage, translateMulti, translateText } from '../lib/gemini';
 import { addReading } from '../lib/stats';
 import { containsKanji, normalizeForm, tokenize, type Span } from '../lib/tokenize';
 import { stopSpeaking } from '../lib/tts';
-import { back, navigate } from '../router';
+import { navigate } from '../router';
 import { useSettings } from '../settings';
 import type { Book, LangCode, Section, Word } from '../types';
 import ParallelControls from '../components/ParallelControls';
@@ -565,8 +565,8 @@ export default function Reader({ bookId, startSection, startPara }: { bookId: nu
         <i style={{ width: `${Math.round(progress * 1000) / 10}%` }} />
       </div>
       <header ref={topRef} className={cx('rd-top', barsHidden && !sel && 'hidden')}>
-        <button className="icon-btn" onClick={() => back('')} aria-label="서재로">
-          <Icon name="left" />
+        <button className="icon-btn" onClick={() => navigate('')} aria-label="홈(서재)으로">
+          <Icon name="home" />
         </button>
         <button className="rd-title" onClick={() => setShowToc(true)}>
           <b>{book.title.replace(/\s*\(맛보기\)/, '')}</b>
