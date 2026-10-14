@@ -7,6 +7,8 @@ import { exportBackup, importBackup } from '../lib/backup';
 import { errorMessage, testConnection } from '../lib/gemini';
 import { ttsSupported, speak } from '../lib/tts';
 import { useSettings } from '../settings';
+import { IS_SHARE } from '../lib/edition';
+import { GuideSteps } from '../components/Guide';
 import { signInWithEmail, signInWithGoogle, signOutSync, syncErrorMessage, syncNow, useSync } from '../lib/sync/sync';
 
 const MODELS = [
@@ -126,6 +128,13 @@ export default function Settings() {
         </div>
       </header>
 
+      {IS_SHARE && (
+        <section className="card stack">
+          <h3>사용 안내</h3>
+          <GuideSteps />
+        </section>
+      )}
+
       <section className="card stack">
         <h3>AI 연결 (Gemini)</h3>
         <p className="muted small">
@@ -179,6 +188,7 @@ export default function Settings() {
         </button>
       </section>
 
+      {!IS_SHARE && (
       <section className="card stack">
         <h3>기기 간 동기화</h3>
         <p className="muted small">
@@ -229,6 +239,7 @@ export default function Settings() {
           </>
         )}
       </section>
+      )}
 
       <section className="card stack">
         <h3>읽기 화면</h3>

@@ -9,7 +9,7 @@ import { recordTomb } from './lib/sync/tombs';
 export type StoreName = 'books' | 'sections' | 'words' | 'highlights' | 'days' | 'cache';
 export const STORES: StoreName[] = ['books', 'sections', 'words', 'highlights', 'days', 'cache'];
 
-const DB_NAME = 'world-through-stories';
+import { DB_NAME } from './lib/edition';
 const DB_VERSION = 1;
 
 let dbPromise: Promise<IDBDatabase> | null = null;

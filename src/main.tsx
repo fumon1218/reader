@@ -3,10 +3,12 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 import { applyTheme } from './settings';
 import { initSync } from './lib/sync/sync';
+import { IS_SHARE, installStoragePrefix } from './lib/edition';
 import './index.css';
 
+installStoragePrefix(); // 배포용 판은 저장 공간 이름을 따로 씁니다
 applyTheme();
-initSync();
+if (!IS_SHARE) initSync();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

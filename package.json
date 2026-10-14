@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host",
-    "build": "vite build",
+    "build": "vite build && npm run build:share",
     "preview": "vite preview --host",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/*.test.ts"
+    "test": "tsx --test tests/*.test.ts",
+    "build:share": "vite build --mode share --outDir dist/share --emptyOutDir false && node scripts/patch-share.mjs"
   },
   "dependencies": {
     "firebase": "^12.0.0",

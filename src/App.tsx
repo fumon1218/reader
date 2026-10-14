@@ -1,4 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import GuideSheet, { hasSeenGuide } from './components/Guide';
+import { IS_SHARE } from './lib/edition';
 import Icon, { type IconName } from './components/Icon';
 import { UIProvider } from './components/ui';
 import { words, useLive } from './db';
@@ -39,6 +41,7 @@ function TabBar({ current }: { current: string }) {
 export default function App() {
   const route = useRoute();
   const [settings] = useSettings();
+  const [guide, setGuide] = useState(() => IS_SHARE && !hasSeenGuide());
 
   useEffect(() => {
     applyTheme();
@@ -71,6 +74,7 @@ export default function App() {
   return (
     <UIProvider>
       {page}
+      {IS_SHARE && <GuideSheet open={guide} onClose={() => setGuide(false)} />}
       {first !== 'read' && <TabBar current={TABS.some((t) => t.path === first) ? first : ''} />}
     </UIProvider>
   );
