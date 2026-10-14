@@ -46,6 +46,9 @@ export interface Book {
   /** data URL (작게 줄인 표지) */
   cover?: string;
   sample?: boolean;
+  /** 기기 간 동기화용 고유 번호 */
+  uid?: string;
+  updatedAt?: number;
 }
 
 export interface Section {
@@ -105,6 +108,8 @@ export interface Highlight {
   text: string;
   note: string;
   createdAt: number;
+  uid?: string;
+  updatedAt?: number;
 }
 
 export interface DayStat {
@@ -114,6 +119,7 @@ export interface DayStat {
   bookId: number;
   seconds: number;
   chars: number;
+  updatedAt?: number;
 }
 
 export interface CacheEntry {

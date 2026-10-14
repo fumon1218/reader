@@ -1,5 +1,5 @@
 import { firebaseConfig } from './config';
-import type { RemoteWord, SyncedWord } from './engine';
+import type { RemoteItem, RemoteWord, SyncedWord } from './engine';
 
 /**
  * Firebase 연결부. SDK는 로그인할 때만 내려받도록 동적으로 불러옵니다.
@@ -72,26 +72,68 @@ export async function signOutUser(): Promise<void> {
 
 const docId = (key: string) => encodeURIComponent(key);
 
-/** since 이후에 서버에서 바뀐 단어를 가져옵니다. */
-export async function pullWords(uid: string, since: number): Promise<RemoteWord[]> {
+export type Coll = 'words' | 'books' | 'highlights' | 'days';
+
+/** since 이후에 서버에서 바뀐 항목을 가져옵니다. */
+export async function pullItems<D>(uid: string, coll: Coll, since: number): Promise<RemoteItem<D>[]> {
   const { db, F } = await loadFirebase();
-  const q = F.query(F.collection(db, 'users', uid, 'words'), F.where('updatedAt', '>', since));
+  const q = F.query(F.collection(db, 'users', uid, coll), F.where('updatedAt', '>', since));
   const snap = await F.getDocs(q);
   return snap.docs.map((d) => {
-    const v = d.data() as { key: string; updatedAt: number; deleted?: boolean; d?: SyncedWord };
+    const v = d.data() as { key: string; updatedAt: number; deleted?: boolean; d?: D };
     return { key: v.key, updatedAt: v.updatedAt, deleted: !!v.deleted, data: v.d };
   });
 }
 
-/** 변경을 서버에 올립니다(500개씩 묶어서). */
-export async function pushWords(uid: string, items: RemoteWord[]): Promise<void> {
+/** 변경을 서버에 올립니다(여러 건씩 묶어서). */
+export async function pushItems(uid: string, coll: Coll, items: RemoteItem[]): Promise<void> {
   const { db, F } = await loadFirebase();
-  for (let i = 0; i < items.length; i += 400) {
+  for (let i = 0; i < items.length; i += 300) {
     const batch = F.writeBatch(db);
-    for (const it of items.slice(i, i + 400)) {
-      const ref = F.doc(db, 'users', uid, 'words', docId(it.key));
-      batch.set(ref, it.deleted ? { key: it.key, updatedAt: it.updatedAt, deleted: true } : { key: it.key, updatedAt: it.updatedAt, deleted: false, d: it.data });
+    for (const it of items.slice(i, i + 300)) {
+      const ref = F.doc(db, 'users', uid, coll, docId(it.key));
+      batch.set(ref, it.deleted ? { key: it.key, updatedAt: it.updatedAt, deleted: true } : { key: it.key, updatedAt: it.updatedAt, deleted: false, d: JSON.parse(JSON.stringify(it.data)) });
     }
     await batch.commit();
   }
 }
+
+export interface RemoteSection {
+  index: number;
+  title: string;
+  paragraphs: string[];
+  startChars: number;
+  chars: number;
+}
+
+/** 책 본문(구간)은 책마다 하위 컬렉션에 한 구간씩 저장합니다. */
+export async function pushSections(uid: string, bookUid: string, secs: RemoteSection[]): Promise<void> {
+  const { db, F } = await loadFirebase();
+  for (let i = 0; i < secs.length; i += 60) {
+    const batch = F.writeBatch(db);
+    for (const sec of secs.slice(i, i + 60)) {
+      batch.set(F.doc(db, 'users', uid, 'books', docId(bookUid), 'sections', String(sec.index)), JSON.parse(JSON.stringify(sec)));
+    }
+    await batch.commit();
+  }
+}
+
+export async function pullSections(uid: string, bookUid: string): Promise<RemoteSection[]> {
+  const { db, F } = await loadFirebase();
+  const snap = await F.getDocs(F.collection(db, 'users', uid, 'books', docId(bookUid), 'sections'));
+  return snap.docs.map((d) => d.data() as RemoteSection).sort((a, b) => a.index - b.index);
+}
+
+export async function deleteSections(uid: string, bookUid: string): Promise<void> {
+  const { db, F } = await loadFirebase();
+  const snap = await F.getDocs(F.collection(db, 'users', uid, 'books', docId(bookUid), 'sections'));
+  for (let i = 0; i < snap.docs.length; i += 300) {
+    const batch = F.writeBatch(db);
+    snap.docs.slice(i, i + 300).forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+  }
+}
+
+// 단어용 (이전 이름 유지)
+export const pullWords = (uid: string, since: number) => pullItems<SyncedWord>(uid, 'words', since) as Promise<RemoteWord[]>;
+export const pushWords = (uid: string, items: RemoteWord[]) => pushItems(uid, 'words', items);

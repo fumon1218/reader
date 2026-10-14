@@ -101,7 +101,7 @@ function WordRow({ w, bookTitle, open, onToggle }: { w: Word; bookTitle?: string
                 if (await ui.confirm(`"${w.lemma}"을(를) 단어장에서 삭제할까요?`, { okLabel: '삭제', danger: true })) {
                   if (w.id !== undefined) {
                     await words.del(w.id);
-                    recordTomb(w.key);
+                    recordTomb('words', w.key);
                   }
                 }
               }}

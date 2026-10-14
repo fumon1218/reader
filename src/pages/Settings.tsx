@@ -173,7 +173,7 @@ export default function Settings() {
             </p>
             {sync.result && (
               <p className="muted small">
-                이 기기 단어 {sync.result.local}개 · 서버로 올림 {sync.result.pushed}개 · 서버에서 받음 {sync.result.pulled}개
+                이 기기 단어 {sync.result.local}개 · 서버로 올림 {sync.result.pushed}건 · 서버에서 받음 {sync.result.pulled}건
                 {sync.result.removed ? ` · 삭제 반영 ${sync.result.removed}개` : ''}
               </p>
             )}

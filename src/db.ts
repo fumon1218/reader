@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Book, CacheEntry, DayStat, Highlight, Section, Word } from './types';
+import { recordTomb } from './lib/sync/tombs';
 
 /**
  * 아주 얇은 IndexedDB 래퍼. 외부 라이브러리 없이 책/단어/통계를 기기에 저장합니다.
@@ -76,7 +77,19 @@ export function onTablesChange(l: Listener): () => void {
 }
 
 // ---- 테이블 ----------------------------------------------------------
+export function newUid(): string {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return Math.random().toString(36).slice(2) + Date.now().toString(36);
+  }
+}
+
 export interface Table<T> {
+  /** 동기화로 받은 값을 그대로(수정 시각을 바꾸지 않고) 저장/삭제합니다. */
+  putRaw(value: T): Promise<IDBValidKey>;
+  bulkPutRaw(values: T[]): Promise<void>;
+  delRaw(key: IDBValidKey): Promise<void>;
   all(): Promise<T[]>;
   get(key: IDBValidKey): Promise<T | undefined>;
   put(value: T): Promise<IDBValidKey>;
@@ -87,7 +100,17 @@ export interface Table<T> {
   where(index: string, value: IDBValidKey | IDBKeyRange): Promise<T[]>;
 }
 
-function table<T>(name: StoreName): Table<T> {
+/** 저장할 때 수정 시각(과 필요하면 고유 번호)을 자동으로 붙입니다. */
+type Stamp = { uid?: boolean; time?: boolean } | undefined;
+function stamped<T>(v: T, stamp: Stamp): T {
+  if (!stamp) return v;
+  const o = { ...(v as Record<string, unknown>) };
+  if (stamp.time) o.updatedAt = Date.now();
+  if (stamp.uid && !o.uid) o.uid = newUid();
+  return o as T;
+}
+
+function table<T>(name: StoreName, stamp?: Stamp): Table<T> {
   const run = async <R,>(mode: IDBTransactionMode, f: (s: IDBObjectStore) => IDBRequest<R>): Promise<R> => {
     const d = await openDb();
     const tx = d.transaction(name, mode);
@@ -102,11 +125,25 @@ function table<T>(name: StoreName): Table<T> {
     all: () => run('readonly', (s) => s.getAll() as IDBRequest<T[]>),
     get: (key) => run('readonly', (s) => s.get(key) as IDBRequest<T | undefined>),
     put: async (value) => {
-      const k = await run('readwrite', (s) => s.put(value));
+      const k = await run('readwrite', (s) => s.put(stamped(value, stamp)));
       emit([name]);
       return k;
     },
     bulkPut: async (values) => {
+      if (!values.length) return;
+      const d = await openDb();
+      const tx = d.transaction(name, 'readwrite');
+      const s = tx.objectStore(name);
+      values.forEach((v) => s.put(stamped(v, stamp)));
+      await txDone(tx);
+      emit([name]);
+    },
+    putRaw: async (value) => {
+      const k = await run('readwrite', (s) => s.put(value));
+      emit([name]);
+      return k;
+    },
+    bulkPutRaw: async (values) => {
       if (!values.length) return;
       const d = await openDb();
       const tx = d.transaction(name, 'readwrite');
@@ -116,6 +153,14 @@ function table<T>(name: StoreName): Table<T> {
       emit([name]);
     },
     del: async (key) => {
+      if (name === 'highlights') {
+        const h = (await run('readonly', (s) => s.get(key) as IDBRequest<Highlight | undefined>)) as Highlight | undefined;
+        if (h?.uid) recordTomb('highlights', h.uid);
+      }
+      await run('readwrite', (s) => s.delete(key));
+      emit([name]);
+    },
+    delRaw: async (key) => {
       await run('readwrite', (s) => s.delete(key));
       emit([name]);
     },
@@ -131,11 +176,11 @@ function table<T>(name: StoreName): Table<T> {
   };
 }
 
-export const books = table<Book>('books');
+export const books = table<Book>('books', { uid: true, time: true });
 export const sections = table<Section>('sections');
 export const words = table<Word>('words');
-export const highlights = table<Highlight>('highlights');
-export const days = table<DayStat>('days');
+export const highlights = table<Highlight>('highlights', { uid: true, time: true });
+export const days = table<DayStat>('days', { time: true });
 export const cache = table<CacheEntry>('cache');
 
 // ---- 여러 테이블에 걸친 작업 ---------------------------------------------
@@ -155,7 +200,13 @@ function eachCursor<T>(req: IDBRequest<IDBCursorWithValue | null>, cb: (v: T) =>
 }
 
 /** 책과 관련 데이터를 지웁니다. 단어장의 단어는 남기고 책 연결만 끊습니다. */
-export async function deleteBook(id: number) {
+export async function deleteBook(id: number, opts: { fromSync?: boolean } = {}) {
+  if (!opts.fromSync) {
+    // 다른 기기에서도 지워지도록 삭제 기록을 남깁니다.
+    const b = await books.get(id);
+    if (b?.uid) recordTomb('books', b.uid);
+    for (const h of await highlights.where('bookId', id)) if (h.uid) recordTomb('highlights', h.uid);
+  }
   const d = await openDb();
   const tx = d.transaction(['books', 'sections', 'highlights', 'days', 'words'], 'readwrite');
   const done = txDone(tx);
@@ -182,7 +233,7 @@ export async function addBookWithSections(book: Book, secs: Omit<Section, 'id' |
   const d = await openDb();
   const tx = d.transaction(['books', 'sections'], 'readwrite');
   const done = txDone(tx);
-  const id = (await wrap(tx.objectStore('books').add(book))) as number;
+  const id = (await wrap(tx.objectStore('books').add({ ...book, uid: book.uid ?? newUid(), updatedAt: Date.now() }))) as number;
   const s = tx.objectStore('sections');
   secs.forEach((sec) => s.add({ ...sec, bookId: id }));
   await done;
