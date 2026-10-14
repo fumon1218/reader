@@ -14,6 +14,8 @@ export interface Settings {
   showKoreanReading: boolean;
   /** 화면 가장자리 탭·화살표·키보드로 한 화면씩 넘기기 */
   pageTurn: boolean;
+  /** 읽는 동안 화면이 꺼지지 않게 하기 */
+  keepAwake: boolean;
   dailyGoalMin: number;
   newPerDay: number;
 }
@@ -29,6 +31,7 @@ export const DEFAULTS: Settings = {
   showRuby: true,
   showKoreanReading: true,
   pageTurn: true,
+  keepAwake: true,
   dailyGoalMin: 20,
   newPerDay: 15,
 };

@@ -87,7 +87,7 @@ const Para = memo(
 
 export default function Reader({ bookId, startSection, startPara }: { bookId: number; startSection?: number; startPara?: number }) {
   const ui = useUI();
-  const [settings] = useSettings();
+  const [settings, setSettings] = useSettings();
   const [book, setBook] = useState<Book | null | undefined>(undefined);
   const [sIdx, setSIdx] = useState<number | null>(null);
   const [section, setSection] = useState<Section | null>(null);
@@ -103,6 +103,7 @@ export default function Reader({ bookId, startSection, startPara }: { bookId: nu
   const restorePara = useRef<number | null>(null);
   const savePosOnLoad = useRef(false);
   const restoreEnd = useRef(false);
+  const [slide, setSlide] = useState<number | null>(null);
 
   // 책 불러오기
   useEffect(() => {
@@ -409,6 +410,43 @@ export default function Reader({ bookId, startSection, startPara }: { bookId: nu
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [section]);
 
+  // 읽는 동안 화면 켜 두기 (지원하는 기기에서만)
+  useEffect(() => {
+    if (!settings.keepAwake || !('wakeLock' in navigator)) return;
+    let lock: WakeLockSentinel | null = null;
+    let alive = true;
+    const acquire = async () => {
+      try {
+        if (document.visibilityState !== 'visible') return;
+        const l = await navigator.wakeLock.request('screen');
+        if (alive) lock = l;
+        else void l.release();
+      } catch {
+        /* 허용되지 않으면 무시 */
+      }
+    };
+    void acquire();
+    const onVis = () => {
+      if (document.visibilityState === 'visible') void acquire();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      alive = false;
+      document.removeEventListener('visibilitychange', onVis);
+      void lock?.release().catch(() => undefined);
+    };
+  }, [settings.keepAwake]);
+
+  const commitSlide = () => {
+    if (slide !== null && slide !== sIdx) goSection(slide);
+    setSlide(null);
+  };
+  const nextTheme = () => {
+    const order = ['paper', 'sepia', 'dark'] as const;
+    const cur = settings.theme === 'auto' ? 'paper' : settings.theme;
+    setSettings({ theme: order[(order.indexOf(cur as (typeof order)[number]) + 1) % order.length] });
+  };
+
   const finish = async () => {
     const cur = await books.get(bookId);
     if (!cur) return;
@@ -502,6 +540,38 @@ export default function Reader({ bookId, startSection, startPara }: { bookId: nu
           )}
         </nav>
       </div>
+
+      {!sel && (
+        <footer className={cx('rd-bottom', barsHidden && 'hidden')} aria-label="읽기 도구">
+          <button className="icon-btn txt" onClick={() => setSettings({ fontSize: Math.max(15, settings.fontSize - 1) })} aria-label="글자 작게">
+            A−
+          </button>
+          <button className="icon-btn txt" onClick={() => setSettings({ fontSize: Math.min(32, settings.fontSize + 1) })} aria-label="글자 크게">
+            A+
+          </button>
+          <input
+            className="range rd-slider"
+            type="range"
+            min={1}
+            max={Math.max(2, book.sectionCount)}
+            step={1}
+            disabled={book.sectionCount < 2}
+            value={slide ?? sIdx + 1}
+            aria-label="책 안에서 위치 이동"
+            onChange={(e) => setSlide(+e.target.value)}
+            onPointerUp={commitSlide}
+            onTouchEnd={commitSlide}
+            onKeyUp={commitSlide}
+          />
+          <span className="rd-slide-n">{slide ?? sIdx + 1}/{book.sectionCount}</span>
+          <button className="icon-btn txt" onClick={nextTheme} aria-label="테마 바꾸기">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none" />
+            </svg>
+          </button>
+        </footer>
+      )}
 
       {settings.pageTurn && (
         <>

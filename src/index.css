@@ -1678,3 +1678,43 @@ body.immersive .tabbar {
     background: color-mix(in srgb, var(--ink) 4%, transparent);
   }
 }
+
+/* ===== 읽기 화면 아래쪽 도구줄 ===== */
+.rd-bottom {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px max(10px, env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 6px) max(10px, env(safe-area-inset-left));
+  background: color-mix(in srgb, var(--bg) 90%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-top: 1px solid var(--line);
+  transition: transform 0.25s ease;
+}
+.rd-bottom.hidden {
+  transform: translateY(100%);
+}
+.rd-bottom .icon-btn.txt {
+  width: auto;
+  min-width: 36px;
+  height: 40px;
+  padding: 0 8px;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+.rd-slider {
+  flex: 1 1 0;
+  width: 0;
+  min-width: 0;
+}
+.rd-slide-n {
+  font-size: 0.78rem;
+  color: var(--ink2);
+  min-width: 3.4em;
+  text-align: right;
+}
