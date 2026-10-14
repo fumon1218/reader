@@ -59,6 +59,10 @@ export interface Book {
   cover?: string;
   sample?: boolean;
   /** 병렬 모드: 켜짐 여부와 표시할 칸의 순서(최대 4개, 'orig' 포함) */
+  /** 마지막으로 읽던 문단 안에서의 위치 (0~1) */
+  paraFrac?: number;
+  /** 책마다 기억하는 글자 모양 */
+  view?: { fontSize: number; fontFamily: 'serif' | 'sans'; lineHeight: number };
   parOn?: boolean;
   par?: string[];
   /** 기기 간 동기화용 고유 번호 */

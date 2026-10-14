@@ -127,8 +127,8 @@ const LOOKUP_SCHEMA = {
 };
 
 /** 문장 속에서 선택한 단어/구절의 뜻을 한국어로 찾습니다. (같은 단어+문장은 캐시) */
-export function lookupWord(lang: LangCode, selected: string, sentence: string, force = false): Promise<LookupResult> {
-  const key = `lk|${lang}|${selected.toLowerCase()}|${hash(sentence)}`;
+export function lookupWord(lang: LangCode, selected: string, sentence: string, force = false, around = ''): Promise<LookupResult> {
+  const key = `lk2|${lang}|${selected.toLowerCase()}|${hash(sentence)}`;
   return cached(key, force, async () => {
     const L = langInfo(lang).english;
     const jaRules =
@@ -140,9 +140,10 @@ export function lookupWord(lang: LangCode, selected: string, sentence: string, f
     const prompt = `You are a concise dictionary for a Korean speaker reading a ${L} book.
 
 Sentence: """${sentence}"""
-Selected text: """${selected}"""
+${around.trim() ? `Neighboring sentences (context only): """${around}"""\n` : ''}Selected text: """${selected}"""
 
-Describe the selected text AS IT IS USED in this sentence. Answer in Korean unless noted.
+Describe the selected text AS IT IS USED in this sentence, using the neighboring sentences to pick the right sense. Answer in Korean unless noted.
+- If the selected text is only a fragment of a longer word or of a fixed expression in the sentence (a phrasal verb, idiom, compound word, or a word split by tokenization), describe the full word or expression and put it in "lemma", and mention in "note" that it is part of it.
 - "lemma": dictionary form in ${L} (for a phrase or idiom, the natural phrase form). Keep the original script.
 ${jaRules}
 - "pos": part of speech in Korean (명사, 동사, 형용사, 부사, 조사, 접속사, 관용구 ...).

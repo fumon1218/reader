@@ -10,7 +10,7 @@ import { addReading } from '../lib/stats';
 import { containsKanji, normalizeForm, tokenize, type Span } from '../lib/tokenize';
 import { stopSpeaking } from '../lib/tts';
 import { navigate } from '../router';
-import { useSettings } from '../settings';
+import { DEFAULTS, useSettings } from '../settings';
 import type { Book, LangCode, Section, Word } from '../types';
 import ParallelControls from '../components/ParallelControls';
 
@@ -129,6 +129,7 @@ export default function Reader({ bookId, startSection, startPara }: { bookId: nu
   const contentRef = useRef<HTMLDivElement>(null);
   const topRef = useRef<HTMLDivElement>(null);
   const restorePara = useRef<number | null>(null);
+  const restoreFrac = useRef(0);
   const savePosOnLoad = useRef(false);
   const restoreEnd = useRef(false);
   const [slide, setSlide] = useState<number | null>(null);
@@ -144,6 +145,7 @@ export default function Reader({ bookId, startSection, startPara }: { bookId: nu
       if (b) {
         const s = startSection ?? b.sectionIndex;
         restorePara.current = startPara ?? (s === b.sectionIndex ? b.paraIndex : 0);
+        restoreFrac.current = startPara === undefined && s === b.sectionIndex ? b.paraFrac ?? 0 : 0;
         setSIdx(Math.min(Math.max(0, s), Math.max(0, b.sectionCount - 1)));
         setProgress(b.progress);
         getSectionTitles(bookId).then((t) => alive && setToc(t));
@@ -153,6 +155,33 @@ export default function Reader({ bookId, startSection, startPara }: { bookId: nu
       alive = false;
     };
   }, [bookId, startSection, startPara]);
+
+  // 책마다 글자 모양 기억: 열 때 불러오고, 바꾸면 저장합니다.
+  const viewReady = useRef(false);
+  useEffect(() => {
+    viewReady.current = false;
+  }, [bookId]);
+  useEffect(() => {
+    if (!book || viewReady.current) return;
+    viewReady.current = true;
+    if (book.view) setSettings({ fontSize: book.view.fontSize, fontFamily: book.view.fontFamily, lineHeight: book.view.lineHeight });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [book?.id]);
+  useEffect(() => {
+    if (!book || !viewReady.current) return;
+    const v = { fontSize: settings.fontSize, fontFamily: settings.fontFamily, lineHeight: settings.lineHeight };
+    if (book.view && book.view.fontSize === v.fontSize && book.view.fontFamily === v.fontFamily && book.view.lineHeight === v.lineHeight) return;
+    if (!book.view && v.fontSize === DEFAULTS.fontSize && v.fontFamily === DEFAULTS.fontFamily && v.lineHeight === DEFAULTS.lineHeight) return;
+    const t = window.setTimeout(async () => {
+      const cur = await books.get(bookId);
+      if (cur) {
+        await books.put({ ...cur, view: v });
+        setBook((b) => (b ? { ...b, view: v } : b));
+      }
+    }, 900);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.fontSize, settings.fontFamily, settings.lineHeight, book?.id]);
 
   // 구간 불러오기
   useEffect(() => {
@@ -237,6 +266,18 @@ export default function Reader({ bookId, startSection, startPara }: { bookId: nu
     };
   }, [bookId]);
 
+  /** 화면 맨 위에 걸린 문단 안에서 얼마나 내려와 있는지(0~1) */
+  const visibleFraction = useCallback((): number => {
+    const root = contentRef.current;
+    if (!root) return 0;
+    const limit = (topRef.current?.getBoundingClientRect().height ?? 56) + 24;
+    for (const el of Array.from(root.querySelectorAll<HTMLElement>('[data-para]'))) {
+      const r = el.getBoundingClientRect();
+      if (r.bottom > limit) return r.height > 0 ? Math.min(0.99, Math.max(0, (limit - r.top) / r.height)) : 0;
+    }
+    return 0;
+  }, []);
+
   // ---- 위치 저장 ----
   const savePosition = useCallback(
     async (paraIndex: number) => {
@@ -251,14 +292,14 @@ export default function Reader({ bookId, startSection, startPara }: { bookId: nu
       setProgress(prog);
       const cur = await books.get(bookId);
       if (!cur) return;
-      const patch: Partial<Book> = { sectionIndex: sIdx, paraIndex, progress: prog, lastReadAt: Date.now() };
+      const patch: Partial<Book> = { sectionIndex: sIdx, paraIndex, paraFrac: Math.round(visibleFraction() * 100) / 100, progress: prog, lastReadAt: Date.now() };
       if (cur.status === 'wishlist') {
         patch.status = 'reading';
         patch.startedAt = Date.now();
       }
       await books.put({ ...cur, ...patch });
     },
-    [book, section, sIdx, cum, bookId]
+    [book, section, sIdx, cum, bookId, visibleFraction]
   );
 
   const firstVisibleParagraph = useCallback((): number => {
@@ -285,12 +326,16 @@ export default function Reader({ bookId, startSection, startPara }: { bookId: nu
     } else if (target && target > 0) {
       const el = contentRef.current?.querySelector<HTMLElement>(`[data-para="${target}"]`);
       if (el) {
-        const top = el.getBoundingClientRect().top + window.scrollY - (topRef.current?.getBoundingClientRect().height ?? 56) - 12;
+        const top = el.getBoundingClientRect().top + window.scrollY - (topRef.current?.getBoundingClientRect().height ?? 56) - 12 + el.getBoundingClientRect().height * restoreFrac.current;
         window.scrollTo(0, Math.max(0, top));
       }
+    } else if (restoreFrac.current > 0) {
+      const el = contentRef.current?.querySelector<HTMLElement>('[data-para="0"]');
+      if (el) window.scrollTo(0, Math.max(0, el.getBoundingClientRect().top + window.scrollY - (topRef.current?.getBoundingClientRect().height ?? 56) - 12 + el.getBoundingClientRect().height * restoreFrac.current));
     } else {
       window.scrollTo(0, 0);
     }
+    restoreFrac.current = 0;
     lastAbs.current = null;
     if (savePosOnLoad.current) {
       savePosOnLoad.current = false;
@@ -391,6 +436,7 @@ export default function Reader({ bookId, startSection, startPara }: { bookId: nu
     setTrs({});
     restoreEnd.current = atEnd;
     restorePara.current = 0;
+    restoreFrac.current = 0;
     savePosOnLoad.current = true;
     setSIdx(i);
   };

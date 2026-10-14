@@ -45,6 +45,12 @@ export default function WordSheet(p: Props) {
   const spans = useMemo(() => sentenceSpans(paragraph, lang), [paragraph, lang]);
   const span = spanAt(spans, tokens[safeA].start);
   const sentence = paragraph.slice(span.start, span.end).trim();
+  // 앞뒤 문장도 AI에게 보여 주면 문맥에 맞는 뜻을 더 잘 고릅니다.
+  const spanIdx = spans.indexOf(span);
+  const around = [spans[spanIdx - 1], spans[spanIdx + 1]]
+    .map((s) => (s ? paragraph.slice(s.start, s.end).trim() : ''))
+    .join(' … ')
+    .slice(0, 400);
   const existing = forms.get(normalizeForm(selected));
   const existingRef = useRef<Word | undefined>(existing);
   existingRef.current = existing;
@@ -69,7 +75,7 @@ export default function WordSheet(p: Props) {
     }
     setRes(null);
     setLoading(true);
-    lookupWord(lang, selected, sentence, retry > 0).then(
+    lookupWord(lang, selected, sentence, retry > 0, around).then(
       async (r) => {
         if (!alive) return;
         setRes(r);
