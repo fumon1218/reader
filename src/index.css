@@ -1632,3 +1632,49 @@ body.immersive .tabbar {
 
 .today-nums { margin-top: 10px; }
 .today-nums b { color: var(--ink); font-weight: 700; }
+
+/* ===== 화면 가장자리로 넘기기 ===== */
+.rd-text.turn-on {
+  padding-left: max(34px, env(safe-area-inset-left));
+  padding-right: max(34px, env(safe-area-inset-right));
+}
+.turn-zone {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  z-index: 20;
+  width: clamp(34px, calc((100vw - 41rem) / 2), 160px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink2);
+  font-size: 2.2rem;
+  line-height: 1;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  cursor: pointer;
+}
+.turn-zone.left {
+  left: 0;
+}
+.turn-zone.right {
+  right: 0;
+}
+.turn-zone span {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+@media (hover: hover) and (pointer: fine) {
+  .turn-zone span {
+    opacity: 0.28;
+  }
+  .turn-zone:hover span {
+    opacity: 0.9;
+  }
+  .turn-zone:hover {
+    background: color-mix(in srgb, var(--ink) 4%, transparent);
+  }
+}

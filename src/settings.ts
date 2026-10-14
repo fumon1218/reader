@@ -12,6 +12,8 @@ export interface Settings {
   ttsRate: number;
   showRuby: boolean;
   showKoreanReading: boolean;
+  /** 화면 가장자리 탭·화살표·키보드로 한 화면씩 넘기기 */
+  pageTurn: boolean;
   dailyGoalMin: number;
   newPerDay: number;
 }
@@ -26,6 +28,7 @@ export const DEFAULTS: Settings = {
   ttsRate: 0.9,
   showRuby: true,
   showKoreanReading: true,
+  pageTurn: true,
   dailyGoalMin: 20,
   newPerDay: 15,
 };

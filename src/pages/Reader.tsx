@@ -102,6 +102,7 @@ export default function Reader({ bookId, startSection, startPara }: { bookId: nu
   const topRef = useRef<HTMLDivElement>(null);
   const restorePara = useRef<number | null>(null);
   const savePosOnLoad = useRef(false);
+  const restoreEnd = useRef(false);
 
   // 책 불러오기
   useEffect(() => {
@@ -247,7 +248,10 @@ export default function Reader({ bookId, startSection, startPara }: { bookId: nu
     if (!section) return;
     const target = restorePara.current;
     restorePara.current = null;
-    if (target && target > 0) {
+    if (restoreEnd.current) {
+      restoreEnd.current = false;
+      window.scrollTo(0, document.documentElement.scrollHeight);
+    } else if (target && target > 0) {
       const el = contentRef.current?.querySelector<HTMLElement>(`[data-para="${target}"]`);
       if (el) {
         const top = el.getBoundingClientRect().top + window.scrollY - (topRef.current?.getBoundingClientRect().height ?? 56) - 12;
@@ -335,14 +339,75 @@ export default function Reader({ bookId, startSection, startPara }: { bookId: nu
     [section, trs, lang, ui]
   );
 
-  const goSection = (i: number) => {
+  const goSection = (i: number, atEnd = false) => {
     if (!book || i < 0 || i >= book.sectionCount) return;
     setSel(null);
     setTrs({});
+    restoreEnd.current = atEnd;
     restorePara.current = 0;
     savePosOnLoad.current = true;
     setSIdx(i);
   };
+
+  // ---- 한 화면씩 넘기기 (가장자리 탭 · 화살표 · 키보드) -----------------------
+  const turn = useCallback(
+    (dir: 1 | -1) => {
+      if (!book || sIdx === null) return;
+      if (sel) {
+        setSel(null); // 단어 시트가 열려 있으면 먼저 닫기만 합니다
+        return;
+      }
+      const doc = document.documentElement;
+      if (dir > 0) {
+        const atBottom = window.scrollY + window.innerHeight >= doc.scrollHeight - 6;
+        if (atBottom) {
+          if (sIdx + 1 < book.sectionCount) goSection(sIdx + 1);
+          else ui.toast('마지막 쪽이에요. 아래의 ‘완독’을 눌러 보세요');
+        } else {
+          window.scrollBy({ top: Math.round(window.innerHeight * 0.88), behavior: 'smooth' });
+        }
+      } else if (window.scrollY <= 6) {
+        if (sIdx > 0) goSection(sIdx - 1, true);
+      } else {
+        window.scrollBy({ top: -Math.round(window.innerHeight * 0.88), behavior: 'smooth' });
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [book, sIdx, sel]
+  );
+  const turnRef = useRef(turn);
+  turnRef.current = turn;
+
+  useEffect(() => {
+    if (!settings.pageTurn) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || showToc || showDisplay) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      if (e.key === 'ArrowRight' || e.key === 'PageDown' || (e.key === ' ' && !e.shiftKey)) {
+        e.preventDefault();
+        turnRef.current(1);
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp' || (e.key === ' ' && e.shiftKey)) {
+        e.preventDefault();
+        turnRef.current(-1);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [settings.pageTurn, showToc, showDisplay]);
+
+  // 처음 한 번만 사용법을 알려 줍니다.
+  useEffect(() => {
+    if (!settings.pageTurn || !section) return;
+    try {
+      if (localStorage.getItem('wts_turn_hint') === '1') return;
+      localStorage.setItem('wts_turn_hint', '1');
+      ui.toast('화면 왼쪽·오른쪽 가장자리를 탭하면 한 화면씩 넘어가요');
+    } catch {
+      /* ignore */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [section]);
 
   const finish = async () => {
     const cur = await books.get(bookId);
@@ -398,7 +463,7 @@ export default function Reader({ bookId, startSection, startPara }: { bookId: nu
 
       <div
         ref={contentRef}
-        className={cx('rd-text', `reader-font-${settings.fontFamily}`, sel && 'has-sheet')}
+        className={cx('rd-text', `reader-font-${settings.fontFamily}`, sel && 'has-sheet', settings.pageTurn && 'turn-on')}
         lang={lang}
         onClick={onTextClick}
       >
@@ -437,6 +502,17 @@ export default function Reader({ bookId, startSection, startPara }: { bookId: nu
           )}
         </nav>
       </div>
+
+      {settings.pageTurn && (
+        <>
+          <button className="turn-zone left" aria-label="이전 화면" onClick={() => turn(-1)}>
+            <span aria-hidden="true">‹</span>
+          </button>
+          <button className="turn-zone right" aria-label="다음 화면" onClick={() => turn(1)}>
+            <span aria-hidden="true">›</span>
+          </button>
+        </>
+      )}
 
       {sel && selPara !== undefined && (
         <WordSheet
