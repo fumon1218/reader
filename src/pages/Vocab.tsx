@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import Icon from '../components/Icon';
+import KanjiBreakdown from '../components/KanjiBreakdown';
 import { Empty, LangPills, Segmented, Sheet, WordText, useUI } from '../components/ui';
 import { books, words, useLive } from '../db';
 import { parseCsv, rowsToWords, toCsv } from '../lib/csv';
@@ -80,6 +81,7 @@ function WordRow({ w, bookTitle, open, onToggle }: { w: Word; bookTitle?: string
             <div className="label">예문</div>
             <input className="input" lang={w.language} value={context} onChange={(e) => setContext(e.target.value)} onBlur={() => context !== w.context && patch({ context })} />
           </div>
+          <KanjiBreakdown lang={w.language} word={w.lemma} saved={w.kanji} onLoaded={(k) => patch({ kanji: k })} />
           {(w.koreanReading || bookTitle) && (
             <p className="muted small">
               {[w.koreanReading, bookTitle].filter(Boolean).join(' · ')}

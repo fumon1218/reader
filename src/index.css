@@ -1922,3 +1922,34 @@ body.immersive .tabbar {
   background: none;
   color: var(--accent);
 }
+
+.kj {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 10px 0;
+}
+.kj-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+}
+.kj-card {
+  flex: 1 1 120px;
+  max-width: 100%;
+  background: var(--surface2);
+  border-radius: 14px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.kj-ch {
+  font-size: 2rem;
+  line-height: 1.1;
+}
+.kj-hun {
+  font-weight: 700;
+}

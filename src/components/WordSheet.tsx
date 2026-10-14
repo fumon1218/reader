@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Icon from './Icon';
+import KanjiBreakdown from './KanjiBreakdown';
 import { WordText, useUI } from './ui';
 import { highlights, words as wordsTable, useLive } from '../db';
 import { AiError, errorMessage, lookupWord, translateText } from '../lib/gemini';
@@ -7,7 +8,7 @@ import { extendRange, normalizeForm, sentenceSpans, spanAt, textOfRange, tokeniz
 import { saveWord } from '../lib/vocab';
 import { speak } from '../lib/tts';
 import { navigate } from '../router';
-import type { Book, LangCode, LookupResult, TranslationResult, Word, WordStatus } from '../types';
+import type { Book, KanjiInfo, LangCode, LookupResult, TranslationResult, Word, WordStatus } from '../types';
 
 interface Props {
   lang: LangCode;
@@ -62,6 +63,8 @@ export default function WordSheet(p: Props) {
   const [transLoading, setTransLoading] = useState(false);
   const [retry, setRetry] = useState(0);
   const [note, setNote] = useState('');
+  const [kanji, setKanji] = useState<KanjiInfo[] | null>(null);
+  useEffect(() => setKanji(null), [selected]);
 
   const hasMeaning = !!existing?.meaning;
   useEffect(() => {
@@ -107,7 +110,8 @@ export default function WordSheet(p: Props) {
 
   const save = async (status: WordStatus) => {
     try {
-      await saveWord({ language: lang, book, sectionIndex: p.sectionIndex, paraIndex: p.paraIndex, selected, sentence, result: res, status });
+      const saved = await saveWord({ language: lang, book, sectionIndex: p.sectionIndex, paraIndex: p.paraIndex, selected, sentence, result: res, status });
+      if (kanji && !saved.kanji) await wordsTable.put({ ...saved, kanji, updatedAt: Date.now() });
       ui.toast(status === 'learning' ? '단어장에 저장했어요' : '아는 단어로 표시했어요');
     } catch (e) {
       ui.toast(errorMessage(e));
@@ -214,6 +218,20 @@ export default function WordSheet(p: Props) {
             {res.otherMeanings.length > 0 && <div className="ws-other">{res.otherMeanings.join(' · ')}</div>}
             {res.note && <div className="ws-note">{res.note}</div>}
           </div>
+        )}
+
+        {res && (
+          <KanjiBreakdown
+            key={res.lemma}
+            lang={lang}
+            word={res.lemma || selected}
+            saved={existing?.kanji ?? kanji ?? undefined}
+            onLoaded={(k) => {
+              setKanji(k);
+              const ex = existingRef.current;
+              if (ex) void wordsTable.put({ ...ex, kanji: k, updatedAt: Date.now() });
+            }}
+          />
         )}
 
         <div className="ws-range">

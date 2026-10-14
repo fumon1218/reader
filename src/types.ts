@@ -83,6 +83,17 @@ export interface Section {
 
 export type WordStatus = 'learning' | 'known';
 
+/** 한자 한 글자 풀이 */
+export interface KanjiInfo {
+  ch: string;
+  /** 한국식 훈음, 예: "배울 학" */
+  hun: string;
+  /** 일본어는 음독·훈독, 중국어는 병음 */
+  reading: string;
+  /** 같은 한자가 들어간 대표 단어 (최대 3개) */
+  words: string[];
+}
+
 export interface Word {
   id?: number;
   /** `${language}:${lemma 소문자}` — 고유 */
@@ -104,6 +115,8 @@ export interface Word {
   contextTranslation?: string;
   sectionIndex?: number;
   paraIndex?: number;
+  /** 한자 풀이(일본어·중국어) */
+  kanji?: KanjiInfo[];
   status: WordStatus;
   createdAt: number;
   updatedAt: number;

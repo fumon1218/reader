@@ -1,6 +1,7 @@
 import { cache } from '../db';
 import { getSettings } from '../settings';
-import { langInfo, type LangCode, type LookupResult, type TranslationResult } from '../types';
+import { langInfo, type KanjiInfo, type LangCode, type LookupResult, type TranslationResult } from '../types';
+import { containsKanji } from './tokenize';
 import { hash } from './util';
 
 export type AiErrorCode = 'nokey' | 'auth' | 'quota' | 'network' | 'blocked' | 'bad';
@@ -187,6 +188,53 @@ Return JSON with "translation" (Korean only) and ${grammarRule}`;
     const r = await callGemini<Partial<TranslationResult>>(prompt, TRANSLATE_SCHEMA);
     if (!r.translation?.trim()) throw new AiError('bad', '번역 결과가 비어 있어요. 다시 시도해 주세요.');
     return { translation: r.translation.trim(), grammar: (r.grammar ?? []).map((g) => g.trim()).filter(Boolean) };
+  });
+}
+
+const KANJI_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    kanji: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: { ch: str, hun: str, reading: str, words: strArr },
+        required: ['ch', 'hun', 'reading', 'words'],
+      },
+    },
+  },
+  required: ['kanji'],
+};
+
+/** 단어에 든 한자를 글자별로 풀이합니다. (한국식 훈음 + 읽는 법 + 대표 단어) */
+export function lookupKanji(lang: LangCode, word: string, force = false): Promise<KanjiInfo[]> {
+  const chars = Array.from(new Set(Array.from(word).filter((c) => containsKanji(c))));
+  const key = `kj|${lang}|${chars.join('')}`;
+  return cached(key, force, async () => {
+    if (!chars.length) return [];
+    const L = langInfo(lang).english;
+    const readingRule =
+      lang === 'zh'
+        ? '"reading": pinyin with tone marks (e.g. xué)'
+        : '"reading": Japanese on\'yomi in katakana and kun\'yomi in hiragana, separated by " / " (e.g. ガク / まな(ぶ))';
+    const prompt = `For a Korean learner of ${L}. Explain each of these Han characters (${chars.join(', ')}), which appear in the word "${word}".
+
+For each character return, in the same order:
+- "ch": the character as written here.
+- "hun": its traditional Korean hun-eum in Hangul (e.g. 學 -> "배울 학", 校 -> "학교 교"). If the character is a Japanese-only or simplified form, give the hun-eum of the corresponding traditional character.
+- ${readingRule}.
+- "words": up to 3 common ${L} words that contain this character (include the word itself only if it is a very common one), in the original script.`;
+    const r = await callGemini<{ kanji?: Partial<KanjiInfo>[] }>(prompt, KANJI_SCHEMA);
+    const out = (r.kanji ?? [])
+      .filter((k) => k.ch && k.hun)
+      .map((k) => ({
+        ch: String(k.ch).trim(),
+        hun: String(k.hun).trim(),
+        reading: String(k.reading ?? '').trim(),
+        words: (k.words ?? []).map((w) => String(w).trim()).filter(Boolean).slice(0, 3),
+      }));
+    if (!out.length) throw new AiError('bad', '한자 풀이를 찾지 못했어요. 다시 시도해 주세요.');
+    return out;
   });
 }
 
